@@ -29,6 +29,16 @@ namespace NullabilityInference
         }
     }
 
+    /// <summary>
+    /// Creates NullabilityNodes for types that appear in the syntax tree.
+    /// 
+    /// We create a NullabilityNode for each syntactic occurrence of a reference type,
+    /// as those are the places where we could insert `?`.
+    /// This visitor maps every `TypeSyntax` to a `TypeWithNode`.
+    /// All other kinds of syntax nodes just return `typeSystem.VoidType` (even expressions that don't produce `void`
+    /// -- only the later EdgeBuildingSyntaxVisitor uses accurate types for expressions).
+    /// For declarations, this visitor registers the `TypeWithNode` with our `typeSystem` instance.
+    /// </summary>
     internal sealed class NodeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
     {
         private readonly SemanticModel semanticModel;

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -27,6 +28,52 @@ namespace NullabilityInference
             Parallel.ForEach(compilation.SyntaxTrees,
                 new ParallelOptions { CancellationToken = cancellationToken },
                 t => CreateEdges(t, cancellationToken));
+
+            MaximumFlowFordFulkerson.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
+
+            // Run non-null with ignoreEdgesWithoutCapacity before nullable so that errors
+            // are reported as close to non-null as possible.
+            typeSystem.NonNullNode.NullType = NullType.Infer;
+            InferNonNull(typeSystem.NonNullNode, ignoreEdgesWithoutCapacity: true);
+            typeSystem.NullableNode.NullType = NullType.Infer;
+            InferNullable(typeSystem.NullableNode, ignoreEdgesWithoutCapacity: false);
+
+            // There's going to be a bunch of remaining nodes where either choice would work.
+            // For parameters, prefer marking those as nullable:
+            foreach (var paramNode in typeSystem.ParameterNodes) {
+                InferNullable(paramNode);
+            }
+            foreach (var node in typeSystem.AllNodes) {
+                // Finally, anything left over is inferred to be non-null:
+                if (node.NullType == NullType.Infer)
+                    node.NullType = NullType.NonNull;
+            }
+        }
+
+        private void InferNonNull(NullabilityNode node, bool ignoreEdgesWithoutCapacity = false)
+        {
+            if (node.NullType != NullType.Infer) {
+                return;
+            }
+            node.NullType = NullType.NonNull;
+            foreach (var edge in node.IncomingEdges) {
+                if (ignoreEdgesWithoutCapacity == false || edge.Capacity > 0) {
+                    InferNonNull(edge.Source, ignoreEdgesWithoutCapacity);
+                }
+            }
+        }
+
+        private void InferNullable(NullabilityNode node, bool ignoreEdgesWithoutCapacity = false)
+        {
+            if (node.NullType != NullType.Infer) {
+                return;
+            }
+            node.NullType = NullType.Nullable;
+            foreach (var edge in node.OutgoingEdges) {
+                if (ignoreEdgesWithoutCapacity == false || edge.Capacity > 0) {
+                    InferNullable(edge.Target, ignoreEdgesWithoutCapacity);
+                }
+            }
         }
 
         private void CreateNodes(SyntaxTree syntaxTree, CancellationToken cancellationToken)
@@ -98,22 +145,5 @@ namespace NullabilityInference
             }
         }
 
-    }
-
-    internal static class RoslynExtensions
-    {
-        public static string StartPosToString(this Location location)
-        {
-            var lineSpan = location.GetLineSpan();
-            string filename = System.IO.Path.GetFileName(lineSpan.Path);
-            return $"{filename}:{lineSpan.StartLinePosition.Line + 1}:{lineSpan.StartLinePosition.Character + 1}";
-        }
-
-        public static string EndPosToString(this Location location)
-        {
-            var lineSpan = location.GetLineSpan();
-            string filename = System.IO.Path.GetFileName(lineSpan.Path);
-            return $"{filename}:{lineSpan.EndLinePosition.Line + 1}:{lineSpan.EndLinePosition.Character + 1}";
-        }
     }
 }

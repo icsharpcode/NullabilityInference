@@ -52,6 +52,16 @@ namespace NullabilityInference
             }
         }
 
+        public IEnumerable<NullabilityNode> ParameterNodes { 
+            get {
+                foreach (var (sym, type) in symbolType) {
+                    if (sym.Kind == SymbolKind.Parameter) {
+                        yield return type.Node;
+                    }
+                }
+            }
+        }
+
         internal void RegisterNodes(SyntaxTree syntaxTree, SyntaxToNodeMapping mapping)
         {
             syntaxMapping.Add(syntaxTree, mapping);

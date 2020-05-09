@@ -4,7 +4,7 @@ This is a prototype for an algorithm that modifies C# code in order to minimize 
 If this ever gets out of the prototype stage (which is highly unlikely), this might be a useful tool when migrate existing C# code to C# 8.0.
 
 Note: to quickly get started with Roslyn, I forked the ICSharpCode.CodeConverter repository; replacing the code converter with the nullability inference.
-Thus most stuff here still is named "CodeConverter" even though it's the C#<->VB code converter is mostly separate from the nullability inference.
+Thus most stuff here still is named "CodeConverter" even though the C#<->VB code converter is mostly separate from the nullability inference.
 
 ## Usage
   * Update your project to use C# 8.0: `<LangVersion>8.0</LangVersion>`

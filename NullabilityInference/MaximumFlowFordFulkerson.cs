@@ -1,18 +1,20 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 
 namespace NullabilityInference
 {
     internal static class MaximumFlowFordFulkerson
     {
-        public static int Compute(IEnumerable<NullabilityNode> allTypes, NullabilityNode source, NullabilityNode sink)
+        public static int Compute(IEnumerable<NullabilityNode> allTypes, NullabilityNode source, NullabilityNode sink, CancellationToken cancellationToken)
         {
             Debug.Assert(source != sink);
             int maxFlow = 0;
             int newFlow;
             ResetVisited(allTypes);
             while ((newFlow = AddFlow(source, sink, int.MaxValue)) > 0) {
+                cancellationToken.ThrowIfCancellationRequested();
                 maxFlow += newFlow;
                 ResetVisited(allTypes);
             }

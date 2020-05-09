@@ -20,7 +20,7 @@ namespace NullabilityInference
 #endif
         internal int Capacity = 1;
         internal int ReverseCapacity;
-        public bool IsError;
+        public bool IsError => Source.NullType == NullType.Nullable && Target.NullType == NullType.NonNull;
 
         /// <summary>
         /// Represents the subtype relation "subType &lt;: superType".

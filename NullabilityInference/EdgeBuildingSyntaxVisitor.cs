@@ -12,6 +12,13 @@ namespace NullabilityInference
 {
     /// <summary>
     /// Walks the syntax tree and constructs NullabilityEdges.
+    /// 
+    /// This visitor assumes that the NodeBuildingSyntaxVisitor has already run for all syntax trees in the project,
+    /// so that the TypeWithNode for any declaration can be looked up in the typeSystem.
+    /// This visitor will:
+    ///  * For every `TypeSyntax`, produce the same `TypeWithNode` as `NodeBuildingSyntaxVisitor` did.
+    ///  * For every `ExpressionSyntax`, produce a `TypeWithNode` for the expression's type and nullability.
+    ///  * Other syntactic nodes return `typeSystem.VoidType`
     /// </summary>
     internal class EdgeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
     {
@@ -111,22 +118,26 @@ namespace NullabilityInference
             }
             var type = node.Type.Accept(this);
             var args = node.ArgumentList?.Arguments.Select(arg => arg.Accept(this)).ToArray() ?? new TypeWithNode[0];
-            // TODO: assign args to parameters
             Debug.Assert(symbolInfo.Symbol.Kind == SymbolKind.Method);
             var ctor = (IMethodSymbol)symbolInfo.Symbol;
-            if (node.ArgumentList != null) {
-                foreach (var (param, arg) in ctor.Parameters.Zip(node.ArgumentList.Arguments, (a, b) => (a, b))) {
-                    if (arg.NameColon != null) {
-                        throw new NotImplementedException("Named arguments");
-                    }
-                    var paramType = typeSystem.GetSymbolType(param);
-                    var argType = Visit(arg.Expression);
-                    var edge = CreateAssignmentEdge(source: argType, target: paramType);
-                    edge?.SetLabel("Argument", arg.GetLocation());
-                }
-            }
+            HandleArgumentsForCall(node.ArgumentList, ctor);
             node.Initializer?.Accept(this);
             return type;
+        }
+
+        private void HandleArgumentsForCall(ArgumentListSyntax? argumentList, IMethodSymbol method)
+        {
+            if (argumentList == null)
+                return;
+            foreach (var (param, arg) in method.Parameters.Zip(argumentList.Arguments)) {
+                if (arg.NameColon != null) {
+                    throw new NotImplementedException("Named arguments");
+                }
+                var paramType = typeSystem.GetSymbolType(param);
+                var argType = Visit(arg.Expression);
+                var edge = CreateAssignmentEdge(source: argType, target: paramType);
+                edge?.SetLabel("Argument", arg.GetLocation());
+            }
         }
 
         public override TypeWithNode VisitVariableDeclarator(VariableDeclaratorSyntax node)
