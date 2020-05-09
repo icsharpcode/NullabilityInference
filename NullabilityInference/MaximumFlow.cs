@@ -5,7 +5,10 @@ using System.Threading;
 
 namespace NullabilityInference
 {
-    internal static class MaximumFlowFordFulkerson
+    /// <summary>
+    /// Implements the Ford-Fulkerson algorithm for maximum flow.
+    /// </summary>
+    internal static class MaximumFlow
     {
         public static int Compute(IEnumerable<NullabilityNode> allTypes, NullabilityNode source, NullabilityNode sink, CancellationToken cancellationToken)
         {

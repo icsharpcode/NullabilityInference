@@ -29,7 +29,7 @@ namespace NullabilityInference
                 new ParallelOptions { CancellationToken = cancellationToken },
                 t => CreateEdges(t, cancellationToken));
 
-            MaximumFlowFordFulkerson.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
+            MaximumFlow.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
 
             // Run non-null with ignoreEdgesWithoutCapacity before nullable so that errors
             // are reported as close to non-null as possible.
@@ -48,6 +48,19 @@ namespace NullabilityInference
                 if (node.NullType == NullType.Infer)
                     node.NullType = NullType.NonNull;
             }
+        }
+
+        /// <summary>
+        /// Returns new syntax trees where the inferred nullability has been inserted.
+        /// </summary>
+        public ParallelQuery<SyntaxTree> ConvertSyntaxTrees(CancellationToken cancellationToken)
+        {
+            return compilation.SyntaxTrees.AsParallel().WithCancellation(cancellationToken).Select(syntaxTree => {
+                var semanticModel = compilation.GetSemanticModel(syntaxTree);
+                var rewriter = new InferredNullabilitySyntaxRewriter(semanticModel, typeSystem.GetMapping(syntaxTree), cancellationToken);
+                var newRoot = rewriter.Visit(syntaxTree.GetRoot());
+                return syntaxTree.WithRootAndOptions(newRoot, syntaxTree.Options);
+            });
         }
 
         private void InferNonNull(NullabilityNode node, bool ignoreEdgesWithoutCapacity = false)

@@ -24,5 +24,18 @@ namespace NullabilityInference
             node.Alias.Accept(this);
             return node.Name.Accept(this);
         }
+
+        public override TypeWithNode VisitNullableType(NullableTypeSyntax node)
+        {
+            var ty = node.ElementType.Accept(this);
+            if (ty.Type?.IsValueType == true) {
+                // TODO: wrap in `Nullable<T>`
+                // note that T may be a generic struct, so the type may include useful NullabilityNodes that we need to preserve
+                throw new NotImplementedException();
+            } else {
+                // Ignore existing nullable reference types; we'll infer them again from scratch.
+                return ty;
+            }
+        }
     }
 }
