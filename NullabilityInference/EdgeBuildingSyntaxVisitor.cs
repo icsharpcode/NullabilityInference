@@ -128,9 +128,6 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitInvocationExpression(InvocationExpressionSyntax node)
         {
-            var delegateType = node.Expression.Accept(this);
-            Dereference(delegateType, node.ArgumentList.OpenParenToken);
-
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol == null) {
                 throw new NotSupportedException("Method symbol not found");
@@ -138,6 +135,17 @@ namespace NullabilityInference
             Debug.Assert(symbolInfo.Symbol.Kind == SymbolKind.Method);
             var method = (IMethodSymbol)symbolInfo.Symbol;
             HandleArgumentsForCall(node.ArgumentList, method);
+            if (method.ReducedFrom != null && node.Expression is MemberAccessExpressionSyntax memberAccess) {
+                // extension method invocation
+                var receiverType = Visit(memberAccess.Expression);
+                var thisParam = method.ReducedFrom.Parameters.First();
+                var edge = CreateAssignmentEdge(source: receiverType, target: typeSystem.GetSymbolType(thisParam));
+                edge?.SetLabel("extension this", memberAccess.OperatorToken.GetLocation());
+                return typeSystem.GetSymbolType(method.ReducedFrom);
+            }
+
+            var delegateType = node.Expression.Accept(this);
+            Dereference(delegateType, node.ArgumentList.OpenParenToken);
             return typeSystem.GetSymbolType(method);
         }
 

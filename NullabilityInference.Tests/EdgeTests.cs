@@ -142,6 +142,16 @@ class Program {
         }
 
         [Fact]
+        public void CallExtensionMethod()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+static class Program {
+    public static string Test(string input) => input.Identity();
+    public static string Identity(this string input) => input;
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
