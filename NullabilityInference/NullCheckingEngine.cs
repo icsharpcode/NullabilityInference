@@ -1,21 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 
 namespace NullabilityInference
 {
     public sealed class NullCheckingEngine
     {
-        private readonly Compilation compilation;
+        private readonly CSharpCompilation compilation;
         private readonly TypeSystem typeSystem;
 
         public TypeSystem TypeSystem => typeSystem;
 
-        public NullCheckingEngine(Compilation compilation)
+        public NullCheckingEngine(CSharpCompilation compilation)
         {
             this.compilation = compilation;
             this.typeSystem = new TypeSystem(compilation);

@@ -46,6 +46,20 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        /// <summary>
+        /// Visit the expression and apply implicit conversions and flow state to the result.
+        /// </summary>
+        private TypeWithNode VisitAndConvert(ExpressionSyntax node)
+        {
+            TypeWithNode result = node.Accept(this);
+            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
+            // TODO: implicit conversions
+            if (typeInfo.ConvertedNullability.FlowState == NullableFlowState.NotNull) {
+                result = result.WithNode(typeSystem.NonNullNode);
+            }
+            return result;
+        }
+
         public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
         {
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
@@ -137,7 +151,7 @@ namespace NullabilityInference
             HandleArgumentsForCall(node.ArgumentList, method);
             if (method.ReducedFrom != null && node.Expression is MemberAccessExpressionSyntax memberAccess) {
                 // extension method invocation
-                var receiverType = Visit(memberAccess.Expression);
+                var receiverType = VisitAndConvert(memberAccess.Expression);
                 var thisParam = method.ReducedFrom.Parameters.First();
                 var edge = CreateAssignmentEdge(source: receiverType, target: typeSystem.GetSymbolType(thisParam));
                 edge?.SetLabel("extension this", memberAccess.OperatorToken.GetLocation());
@@ -158,7 +172,7 @@ namespace NullabilityInference
                     throw new NotImplementedException("Named arguments");
                 }
                 var paramType = typeSystem.GetSymbolType(param);
-                var argType = Visit(arg.Expression);
+                var argType = VisitAndConvert(arg.Expression);
                 var edge = CreateAssignmentEdge(source: argType, target: paramType);
                 edge?.SetLabel("Argument", arg.GetLocation());
             }
@@ -169,7 +183,7 @@ namespace NullabilityInference
             var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
             node.ArgumentList?.Accept(this);
             if (symbol != null && node.Initializer != null) {
-                var valueType = Visit(node.Initializer.Value);
+                var valueType = VisitAndConvert(node.Initializer.Value);
                 var symbolType = typeSystem.GetSymbolType(symbol);
                 var edge = CreateAssignmentEdge(source: valueType, target: symbolType);
                 edge?.SetLabel("VarInit", node.Initializer.GetLocation());
@@ -179,15 +193,15 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitThrowExpression(ThrowExpressionSyntax node)
         {
-            var exception = Visit(node.Expression);
+            var exception = VisitAndConvert(node.Expression);
             Dereference(exception, node.ThrowKeyword);
             return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
         {
-            var lhs = Visit(node.Left);
-            var rhs = Visit(node.Right);
+            var lhs = VisitAndConvert(node.Left);
+            var rhs = VisitAndConvert(node.Right);
             Debug.Assert(SymbolEqualityComparer.Default.Equals(lhs.Type, rhs.Type));
             var edge = CreateAssignmentEdge(source: rhs, target: lhs);
             edge?.SetLabel("Assign", node.OperatorToken.GetLocation());
@@ -196,12 +210,15 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitBinaryExpression(BinaryExpressionSyntax node)
         {
-            var lhs = Visit(node.Left);
-            var rhs = Visit(node.Right);
+            var lhs = VisitAndConvert(node.Left);
+            var rhs = VisitAndConvert(node.Right);
             switch (node.Kind()) {
                 case SyntaxKind.CoalesceExpression:
                     // TODO: handle generics (IEnumerable<string?>? ?? IEnumerable<string>) -> IEnumerable<string?>
                     return rhs;
+                case SyntaxKind.EqualsExpression:
+                    // TODO: handle overloaded operators
+                    return typeSystem.VoidType;
                 default:
                     throw new NotImplementedException(node.Kind().ToString());
             }
@@ -227,7 +244,7 @@ namespace NullabilityInference
                 }
                 node.Body?.Accept(this);
                 if (node.ExpressionBody != null) {
-                    var returnType = Visit(node.ExpressionBody.Expression);
+                    var returnType = VisitAndConvert(node.ExpressionBody.Expression);
                     var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
                     edge?.SetLabel("return", node.ExpressionBody.GetLocation());
                 }
@@ -240,7 +257,7 @@ namespace NullabilityInference
         public override TypeWithNode VisitReturnStatement(ReturnStatementSyntax node)
         {
             if (node.Expression != null) {
-                var returnType = Visit(node.Expression);
+                var returnType = VisitAndConvert(node.Expression);
                 var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
                 edge?.SetLabel("return", node.GetLocation());
             }

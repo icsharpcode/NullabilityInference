@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Text;
+﻿using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 
 namespace NullabilityInference
@@ -19,6 +16,11 @@ namespace NullabilityInference
         {
             this.Type = type;
             this.Node = node;
+        }
+
+        internal TypeWithNode WithNode(NullabilityNode newNode)
+        {
+            return new TypeWithNode(Type, newNode);
         }
     }
 }

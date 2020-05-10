@@ -44,7 +44,7 @@ class C {
 ```
 
 We'll use `!` for types known to be non-null, `?` for types known to be nullable, and `#n` for nullabilities that will need to be inferred by the algorithm.
-We construct a global "assignment graph" for these nullabilities.
+We construct a global "flow graph" for these nullabilities.
 If there's an assignment `a = b`, we create an edge from `b`'s type to `a`'s type.
 If there's an assignment `b = null`, we create an edge from a special `nullable` node to `b`'s type.
 On a dereference `a.M();`, we create an edge from `a`'s type to a special `nonnull` node (unless the dereference is protected by `if (a != null)`).

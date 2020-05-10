@@ -39,8 +39,9 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
         private static bool HasPathFromParameterToReturnType(string program)
         {
             var syntaxTree = SyntaxFactory.ParseSyntaxTree(program);
-            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Warnings);
             var compilation = CSharpCompilation.Create("test", new[] { syntaxTree }, defaultReferences.Value, options);
+            compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, CancellationToken.None);
             foreach (var diag in compilation.GetDiagnostics()) {
                 Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString());
             }
@@ -117,6 +118,21 @@ class Program {
         }
 
         [Fact]
+        public void NullCheck()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input)
+    {
+        if (input == null) {
+            return ""null"";
+        }
+        return input;
+    }
+}"));
+        }
+
+        [Fact]
         public void UseField()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
@@ -126,6 +142,24 @@ class Program {
     public static string Test(string input)
     {
         field = input;
+        return field;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UseFieldWithNullCheck()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    static string field;
+
+    public static string Test(string input)
+    {
+        field = input;
+        if (field == null) {
+            return ""null"";
+        }
         return field;
     }
 }"));
