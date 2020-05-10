@@ -38,7 +38,8 @@ namespace NullabilityInference
         public override TypeWithNode DefaultVisit(SyntaxNode node)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            //Debug.Assert(!(node is ExpressionSyntax));
+            if (node is ExpressionSyntax)
+                throw new NotImplementedException(node.Kind().ToString());
             foreach (var child in node.ChildNodes()) {
                 Visit(child);
             }
@@ -168,6 +169,13 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitThrowExpression(ThrowExpressionSyntax node)
+        {
+            var exception = Visit(node.Expression);
+            Dereference(exception, node.ThrowKeyword);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
         {
             var lhs = Visit(node.Left);
@@ -176,6 +184,19 @@ namespace NullabilityInference
             var edge = CreateAssignmentEdge(source: rhs, target: lhs);
             edge?.SetLabel("Assign", node.OperatorToken.GetLocation());
             return lhs;
+        }
+
+        public override TypeWithNode VisitBinaryExpression(BinaryExpressionSyntax node)
+        {
+            var lhs = Visit(node.Left);
+            var rhs = Visit(node.Right);
+            switch (node.Kind()) {
+                case SyntaxKind.CoalesceExpression:
+                    // TODO: handle generics (IEnumerable<string?>? ?? IEnumerable<string>) -> IEnumerable<string?>
+                    return rhs;
+                default:
+                    throw new NotImplementedException(node.Kind().ToString());
+            }
         }
 
         public override TypeWithNode VisitThisExpression(ThisExpressionSyntax node)

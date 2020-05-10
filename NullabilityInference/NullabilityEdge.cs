@@ -10,7 +10,7 @@ namespace NullabilityInference
     /// An edge in the graph of nullability nodes.
     /// </summary>
     [DebuggerDisplay("{Source} -> {Target}")]
-    public sealed class NullabilityEdge
+    internal sealed class NullabilityEdge
     {
         public NullabilityNode Source { get; private set; }
         public NullabilityNode Target { get; private set; }

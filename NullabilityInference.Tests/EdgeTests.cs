@@ -141,5 +141,33 @@ class Program {
 }"));
         }
 
+        [Fact]
+        public void NullCoalescingLeft()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => input ?? ""abc"";
+}"));
+        }
+
+
+        [Fact]
+        public void NullCoalescingRight()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    static string field;
+    public static string Test(string input) => field ?? input;
+}"));
+        }
+
+        [Fact]
+        public void NullCoalescingWithThrowExpr()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => input ?? throw null;
+}"));
+        }
     }
 }

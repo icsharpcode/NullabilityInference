@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -13,6 +14,7 @@ namespace NullabilityInference
         public NullabilityNode NonNullNode { get; } = new SpecialNullabilityNode(NullType.NonNull);
         public NullabilityNode ObliviousNode { get; } = new SpecialNullabilityNode(NullType.Oblivious);
 
+        private readonly Compilation compilation;
         private readonly Dictionary<SyntaxTree, SyntaxToNodeMapping> syntaxMapping = new Dictionary<SyntaxTree, SyntaxToNodeMapping>();
         private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
 
@@ -22,12 +24,26 @@ namespace NullabilityInference
 
         public TypeSystem(Compilation compilation)
         {
+            this.compilation = compilation;
             this.voidType = compilation.GetSpecialType(SpecialType.System_Void);
         }
 
         public TypeWithNode GetSymbolType(ISymbol symbol)
         {
-            return symbolType[symbol];
+            if (symbolType.TryGetValue(symbol, out var type)) {
+                Debug.Assert(SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule),
+                    "Entries in the symbolType dictionary should be from the SourceModule.");
+                return type;
+            }
+            Debug.Assert(!SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule),
+                "Symbols from the SourceModule should be found in the symbolType dictionary.");
+            switch (symbol.Kind) {
+                case SymbolKind.Method:
+                    var method = (IMethodSymbol)symbol;
+                    return FromType(method.ReturnType, method.ReturnNullableAnnotation);
+                default:
+                    throw new NotImplementedException($"External symbol: {symbol.Kind}");
+            }
         }
 
         internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability)

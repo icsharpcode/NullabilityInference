@@ -110,7 +110,7 @@ namespace NullabilityInference
             visitor.Visit(syntaxTree.GetRoot(cancellationToken));
         }
 
-        public GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter, Predicate<NullabilityEdge> edgeFilter)
+        public GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter)
         {
             if (nodeFilter == null)
                 throw new ArgumentNullException("includeInGraph");
@@ -118,7 +118,7 @@ namespace NullabilityInference
             List<NullabilityEdge> graphEdges = new List<NullabilityEdge>();
             foreach (NullabilityNode node in typeSystem.AllNodes) {
                 foreach (NullabilityEdge edge in node.IncomingEdges) {
-                    if (edgeFilter(edge) || nodeFilter(edge.Source) || nodeFilter(edge.Target)) {
+                    if (nodeFilter(edge.Source) || nodeFilter(edge.Target)) {
                         graphEdges.Add(edge);
                     }
                 }
