@@ -29,7 +29,7 @@ namespace NullabilityInference
             var symbolInfo = semanticModel.GetSymbolInfo(node);
             if (symbolInfo.Symbol is ITypeSymbol { IsValueType: false }) {
                 // Remove existing nullable reference types
-                return node.ElementType.Accept(this);
+                return node.ElementType.Accept(this).WithTrailingTrivia(node.GetTrailingTrivia());
             } else {
                 return node.ReplaceNode(node.ElementType, node.ElementType.Accept(this));
             }

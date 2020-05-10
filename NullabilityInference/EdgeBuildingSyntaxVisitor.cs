@@ -125,6 +125,21 @@ namespace NullabilityInference
             return type;
         }
 
+        public override TypeWithNode VisitInvocationExpression(InvocationExpressionSyntax node)
+        {
+            var delegateType = node.Expression.Accept(this);
+            Dereference(delegateType, node.ArgumentList.OpenParenToken);
+
+            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+            if (symbolInfo.Symbol == null) {
+                throw new NotSupportedException("Method symbol not found");
+            }
+            Debug.Assert(symbolInfo.Symbol.Kind == SymbolKind.Method);
+            var method = (IMethodSymbol)symbolInfo.Symbol;
+            HandleArgumentsForCall(node.ArgumentList, method);
+            return typeSystem.GetSymbolType(method);
+        }
+
         private void HandleArgumentsForCall(ArgumentListSyntax? argumentList, IMethodSymbol method)
         {
             if (argumentList == null)
@@ -167,6 +182,40 @@ namespace NullabilityInference
         {
             var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
             return new TypeWithNode(typeInfo.Type, typeSystem.NonNullNode);
+        }
+
+        private TypeWithNode currentMethodReturnType;
+
+        public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            var outerMethodReturnType = currentMethodReturnType;
+            try {
+                var symbol = semanticModel.GetDeclaredSymbol(node);
+                if (symbol != null) {
+                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+                } else {
+                    currentMethodReturnType = typeSystem.VoidType;
+                }
+                node.Body?.Accept(this);
+                if (node.ExpressionBody != null) {
+                    var returnType = Visit(node.ExpressionBody.Expression);
+                    var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
+                    edge?.SetLabel("return", node.ExpressionBody.GetLocation());
+                }
+            } finally {
+                currentMethodReturnType = outerMethodReturnType;
+            }
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitReturnStatement(ReturnStatementSyntax node)
+        {
+            if (node.Expression != null) {
+                var returnType = Visit(node.Expression);
+                var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
+                edge?.SetLabel("return", node.GetLocation());
+            }
+            return typeSystem.VoidType;
         }
 
         private NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)

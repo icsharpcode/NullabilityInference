@@ -13,6 +13,8 @@ namespace NullabilityInference
         private readonly Compilation compilation;
         private readonly TypeSystem typeSystem;
 
+        public TypeSystem TypeSystem => typeSystem;
+
         public NullCheckingEngine(Compilation compilation)
         {
             this.compilation = compilation;

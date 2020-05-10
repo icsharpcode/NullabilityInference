@@ -7,11 +7,11 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace NullabilityInference
 {
-    internal sealed class TypeSystem
+    public sealed class TypeSystem
     {
-        public readonly SpecialNullabilityNode NullableNode = new SpecialNullabilityNode(NullType.Nullable);
-        public readonly SpecialNullabilityNode NonNullNode = new SpecialNullabilityNode(NullType.NonNull);
-        public readonly SpecialNullabilityNode ObliviousNode = new SpecialNullabilityNode(NullType.Oblivious);
+        public NullabilityNode NullableNode { get; } = new SpecialNullabilityNode(NullType.Nullable);
+        public NullabilityNode NonNullNode { get; } = new SpecialNullabilityNode(NullType.NonNull);
+        public NullabilityNode ObliviousNode { get; } = new SpecialNullabilityNode(NullType.Oblivious);
 
         private readonly Dictionary<SyntaxTree, SyntaxToNodeMapping> syntaxMapping = new Dictionary<SyntaxTree, SyntaxToNodeMapping>();
         private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
@@ -32,7 +32,8 @@ namespace NullabilityInference
 
         internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability)
         {
-            return new TypeWithNode(type ?? voidType, nullability switch {
+            return new TypeWithNode(type ?? voidType, nullability switch
+            {
                 NullableAnnotation.Annotated => NullableNode,
                 NullableAnnotation.NotAnnotated => NonNullNode,
                 _ => ObliviousNode,
@@ -52,7 +53,7 @@ namespace NullabilityInference
             }
         }
 
-        public IEnumerable<NullabilityNode> ParameterNodes { 
+        internal IEnumerable<NullabilityNode> ParameterNodes {
             get {
                 foreach (var (sym, type) in symbolType) {
                     if (sym.Kind == SymbolKind.Parameter) {
@@ -81,9 +82,9 @@ namespace NullabilityInference
         /// </remarks>
         internal class Builder
         {
-            public readonly SpecialNullabilityNode NullableNode;
-            public readonly SpecialNullabilityNode NonNullNode;
-            public readonly SpecialNullabilityNode ObliviousNode;
+            public readonly NullabilityNode NullableNode;
+            public readonly NullabilityNode NonNullNode;
+            public readonly NullabilityNode ObliviousNode;
             public readonly TypeWithNode VoidType;
 
             public Builder(TypeSystem typeSystem)

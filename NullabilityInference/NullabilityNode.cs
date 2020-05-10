@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -20,6 +21,9 @@ namespace NullabilityInference
         /// List of outgoing edges.
         /// </summary>
         internal List<NullabilityEdge> OutgoingEdges = new List<NullabilityEdge>();
+
+        public IEnumerable<NullabilityNode> Predecessors => IncomingEdges.Select(e => e.Source);
+        public IEnumerable<NullabilityNode> Successors => OutgoingEdges.Select(e => e.Target);
 
         /// <summary>
         /// Name for the DOT graph.

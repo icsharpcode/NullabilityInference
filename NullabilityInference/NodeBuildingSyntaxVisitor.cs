@@ -114,5 +114,18 @@ namespace NullabilityInference
             node.Default?.Accept(this);
             return typeSystem.VoidType;
         }
+
+        public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
+        {
+            var returnType = node.ReturnType.Accept(this);
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol != null) {
+                typeSystem.AddSymbolType(symbol, returnType);
+            }
+            node.ParameterList.Accept(this);
+            node.Body?.Accept(this);
+            node.ExpressionBody?.Accept(this);
+            return typeSystem.VoidType;
+        }
     }
 }

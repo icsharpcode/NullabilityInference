@@ -10,7 +10,7 @@ namespace NullabilityInference
     /// Pairs a C# type with a nullability node that can be used to infer the nullability.
     /// </summary>
     [DebuggerDisplay("{Type}{Node}")]
-    internal readonly struct TypeWithNode
+    public readonly struct TypeWithNode
     {
         public readonly ITypeSymbol? Type;
         public readonly NullabilityNode Node;
