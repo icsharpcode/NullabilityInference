@@ -21,6 +21,7 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
             var testMethod = programClass!.GetMembers("Test").Single();
             var parameterNode = engine.TypeSystem.GetSymbolType(testMethod.GetParameters().Single()).Node;
             var returnNode = engine.TypeSystem.GetSymbolType(testMethod).Node;
+            // engine.ExportTypeGraph().Show();
             return ReachableNodes(parameterNode, n => n.Successors).Contains(returnNode);
         }
 
@@ -81,6 +82,19 @@ class Program {
     public static string Test(string input)
     {
         string local = input;
+        return local;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UseLocalVar()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input)
+    {
+        var local = input;
         return local;
     }
 }"));
@@ -229,6 +243,31 @@ class Program {
             Assert.False(HasPathFromParameterToReturnType(@"
 class Program {
     public static string Test(string input) => input ?? throw null;
+}"));
+        }
+
+        [Fact]
+        public void ListElement()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var list = new System.Collections.Generic.List<string>();
+        list.Add(input);
+        return list[0];
+    }
+}"));
+        }
+
+        [Fact]
+        public void ListElementViaCollectionInit()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var list = new System.Collections.Generic.List<string> { input };
+        return list[0];
+    }
 }"));
         }
     }

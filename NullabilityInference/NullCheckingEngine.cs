@@ -112,6 +112,11 @@ namespace NullabilityInference
             visitor.Visit(syntaxTree.GetRoot(cancellationToken));
         }
 
+        public GraphVizGraph ExportTypeGraph()
+        {
+            return ExportTypeGraph(n => n.NullType != NullType.Oblivious);
+        }
+
         public GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter)
         {
             if (nodeFilter == null)

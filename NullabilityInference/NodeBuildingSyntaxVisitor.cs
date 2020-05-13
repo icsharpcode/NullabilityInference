@@ -1,7 +1,9 @@
 ﻿// Copyright (c) 2020 Daniel Grunwald
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -67,39 +69,34 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
-        public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
+        protected override TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments)
         {
-            return HandleTypeName(node);
-        }
-
-        public override TypeWithNode VisitPredefinedType(PredefinedTypeSyntax node)
-        {
-            return HandleTypeName(node);
-        }
-
-        private TypeWithNode HandleTypeName(TypeSyntax node)
-        {
+            TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is ITypeSymbol ty) {
-                if (ty.IsValueType) {
-                    return new TypeWithNode(ty, typeSystem.ObliviousNode);
+                if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
+                    return new TypeWithNode(ty, Mapping.CreateNewNode(node), typeArgs);
+                } else {
+                    return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                 }
-                return new TypeWithNode(ty, Mapping.CreateNewNode(node));
             }
             return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitVariableDeclaration(VariableDeclarationSyntax node)
         {
-            var type = node.Type.Accept(this);
-            foreach (var v in node.Variables) {
+            foreach (var v in node.Variables)
                 v.Accept(this);
-                var symbol = semanticModel.GetDeclaredSymbol(v, cancellationToken);
-                if (symbol != null) {
-                    typeSystem.AddSymbolType(symbol, type);
+            if (!(node.Type is SimpleNameSyntax { IsVar: true })) {
+                var type = node.Type.Accept(this);
+                foreach (var v in node.Variables) {
+                    var symbol = semanticModel.GetDeclaredSymbol(v, cancellationToken);
+                    if (symbol != null) {
+                        typeSystem.AddSymbolType(symbol, type);
+                    }
                 }
             }
-            return type;
+            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitParameter(ParameterSyntax node)

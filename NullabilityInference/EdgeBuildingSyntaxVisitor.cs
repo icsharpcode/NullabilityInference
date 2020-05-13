@@ -1,6 +1,7 @@
 ﻿// Copyright (c) 2020 Daniel Grunwald
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
@@ -64,162 +65,27 @@ namespace NullabilityInference
             return operation.Accept(operationVisitor, new EdgeBuildingContext());
         }
 
-        /// <summary>
-        /// Visit the expression and apply implicit conversions and flow state to the result.
-        /// </summary>
-        private TypeWithNode VisitAndConvert(ExpressionSyntax node)
-        {
-            TypeWithNode result = node.Accept(this);
-            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
-            // TODO: implicit conversions
-            if (typeInfo.ConvertedNullability.FlowState == NullableFlowState.NotNull) {
-                result = result.WithNode(typeSystem.NonNullNode);
-            }
-            return result;
-        }
-
-        public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
-        {
-            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
-            if (symbolInfo.Symbol == null) {
-                throw new NotImplementedException("symbolInfo.Symbol == null");
-            } else {
-                switch (symbolInfo.Symbol.Kind) {
-                    case SymbolKind.Namespace:
-                        return typeSystem.VoidType;
-                    case SymbolKind.Field:
-                    case SymbolKind.Parameter:
-                    case SymbolKind.Local:
-                        return typeSystem.GetSymbolType(symbolInfo.Symbol);
-                    case SymbolKind.NamedType:
-                        var ty = (ITypeSymbol)symbolInfo.Symbol;
-                        //if (ty.IsValueType) {
-                        //  return new TypeWithNode(ty, typeSystem.ObliviousNode);
-                        //}
-                        return new TypeWithNode(ty, mapping[node]);
-                    default:
-                        // TODO:
-                        return typeSystem.FromType(typeInfo.Type, typeInfo.Nullability.Annotation);
-                }
-            }
-        }
-
         internal bool IsNonNullFlow(SyntaxNode syntax)
         {
             var typeInfo = semanticModel.GetTypeInfo(syntax, cancellationToken);
             return typeInfo.Nullability.FlowState == NullableFlowState.NotNull;
         }
 
-        public override TypeWithNode VisitPredefinedType(PredefinedTypeSyntax node)
+        protected override TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments)
         {
+            TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             switch (symbolInfo.Symbol!.Kind) {
                 case SymbolKind.NamedType:
                     var ty = (INamedTypeSymbol)symbolInfo.Symbol;
-                    if (ty.IsValueType) {
-                        return new TypeWithNode(ty, typeSystem.ObliviousNode);
+                    if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
+                        return new TypeWithNode(ty, mapping[node], typeArgs);
+                    } else {
+                        return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                     }
-                    return new TypeWithNode(ty, mapping[node]);
                 default:
                     throw new NotImplementedException(symbolInfo.Symbol.Kind.ToString());
             }
-        }
-
-        public override TypeWithNode VisitLiteralExpression(LiteralExpressionSyntax node)
-        {
-            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
-            if (typeInfo.Type?.IsValueType == true) {
-                return new TypeWithNode(typeInfo.Type, typeSystem.ObliviousNode);
-            }
-            switch (node.Kind()) {
-                case SyntaxKind.StringLiteralExpression:
-                    return new TypeWithNode(typeInfo.Type, typeSystem.NonNullNode);
-                case SyntaxKind.NullLiteralExpression:
-                    return new TypeWithNode(typeInfo.Type, typeSystem.NullableNode);
-                default:
-                    throw new NotImplementedException(node.Kind().ToString());
-            }
-        }
-
-        public override TypeWithNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
-        {
-            var target = node.Expression.Accept(this);
-            Dereference(target, node.OperatorToken);
-            return node.Name.Accept(this);
-        }
-
-        public override TypeWithNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
-        {
-            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            if (symbolInfo.Symbol == null) {
-                throw new NotSupportedException("Constructor symbol not found");
-            }
-            var type = node.Type.Accept(this);
-            var args = node.ArgumentList?.Arguments.Select(arg => arg.Accept(this)).ToArray() ?? new TypeWithNode[0];
-            Debug.Assert(symbolInfo.Symbol.Kind == SymbolKind.Method);
-            var ctor = (IMethodSymbol)symbolInfo.Symbol;
-            HandleArgumentsForCall(node.ArgumentList, ctor);
-            node.Initializer?.Accept(this);
-            return type;
-        }
-
-        public override TypeWithNode VisitInvocationExpression(InvocationExpressionSyntax node)
-        {
-            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            if (symbolInfo.Symbol == null) {
-                throw new NotSupportedException("Method symbol not found");
-            }
-            Debug.Assert(symbolInfo.Symbol.Kind == SymbolKind.Method);
-            var method = (IMethodSymbol)symbolInfo.Symbol;
-            HandleArgumentsForCall(node.ArgumentList, method);
-            if (method.ReducedFrom != null && node.Expression is MemberAccessExpressionSyntax memberAccess) {
-                // extension method invocation
-                var receiverType = VisitAndConvert(memberAccess.Expression);
-                var thisParam = method.ReducedFrom.Parameters.First();
-                var edge = CreateAssignmentEdge(source: receiverType, target: typeSystem.GetSymbolType(thisParam));
-                edge?.SetLabel("extension this", memberAccess.OperatorToken.GetLocation());
-                return typeSystem.GetSymbolType(method.ReducedFrom);
-            }
-
-            var delegateType = node.Expression.Accept(this);
-            Dereference(delegateType, node.ArgumentList.OpenParenToken);
-            return typeSystem.GetSymbolType(method);
-        }
-
-        private void HandleArgumentsForCall(ArgumentListSyntax? argumentList, IMethodSymbol method)
-        {
-            if (argumentList == null)
-                return;
-            foreach (var (param, arg) in method.Parameters.Zip(argumentList.Arguments)) {
-                if (arg.NameColon != null) {
-                    throw new NotImplementedException("Named arguments");
-                }
-                var paramType = typeSystem.GetSymbolType(param);
-                var argType = VisitAndConvert(arg.Expression);
-                var edge = CreateAssignmentEdge(source: argType, target: paramType);
-                edge?.SetLabel("Argument", arg.GetLocation());
-            }
-        }
-
-        public override TypeWithNode VisitVariableDeclarator(VariableDeclaratorSyntax node)
-        {
-            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
-            node.ArgumentList?.Accept(this);
-            if (symbol != null && node.Initializer != null) {
-                var valueType = VisitAndConvert(node.Initializer.Value);
-                var symbolType = typeSystem.GetSymbolType(symbol);
-                var edge = CreateAssignmentEdge(source: valueType, target: symbolType);
-                edge?.SetLabel("VarInit", node.Initializer.GetLocation());
-            }
-            return typeSystem.VoidType;
-        }
-
-        public override TypeWithNode VisitThrowExpression(ThrowExpressionSyntax node)
-        {
-            var exception = VisitAndConvert(node.Expression);
-            Dereference(exception, node.ThrowKeyword);
-            return typeSystem.VoidType;
         }
 
         internal TypeWithNode currentMethodReturnType;
@@ -242,8 +108,43 @@ namespace NullabilityInference
 
         internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
         {
-            // TODO: generics
+            Debug.Assert(SymbolEqualityComparer.Default.Equals(source.Type, target.Type));
+            if (source.Type is INamedTypeSymbol namedType) {
+                Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
+                Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);
+                for (int i = 0; i < namedType.TypeParameters.Length; i++) {
+                    var tp = namedType.TypeParameters[i];
+                    var sourceArg = source.TypeArguments[i];
+                    var targetArg = target.TypeArguments[i];
+                    switch (tp.Variance) {
+                        case VarianceKind.None:
+                            // List<string> --/--> IEnumerable<string?>
+                            CreateBidirectionalEdge(sourceArg, targetArg);
+                            break;
+                        case VarianceKind.Out:
+                            // IEnumerable<string> --> IEnumerable<string?>
+                            CreateAssignmentEdge(sourceArg, targetArg);
+                            break;
+                        case VarianceKind.In:
+                            // IComparable<string?> --> IComparable<string>
+                            CreateAssignmentEdge(targetArg, sourceArg);
+                            break;
+                    }
+                }
+            }
             return CreateEdge(source.Node, target.Node);
+        }
+
+        private void CreateBidirectionalEdge(TypeWithNode source, TypeWithNode target)
+        {
+            CreateEdge(source.Node, target.Node);
+            CreateEdge(target.Node, source.Node);
+
+            Debug.Assert(SymbolEqualityComparer.Default.Equals(source.Type, target.Type));
+            Debug.Assert(source.TypeArguments.Count == target.TypeArguments.Count);
+            foreach (var (s, t) in source.TypeArguments.Zip(target.TypeArguments)) {
+                CreateBidirectionalEdge(s, t);
+            }
         }
 
         private void Dereference(TypeWithNode type, in SyntaxToken derefToken)

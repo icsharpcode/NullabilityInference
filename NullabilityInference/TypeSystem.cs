@@ -40,6 +40,18 @@ namespace NullabilityInference
                 case SymbolKind.Method:
                     var method = (IMethodSymbol)symbol;
                     return FromType(method.ReturnType, method.ReturnNullableAnnotation);
+                case SymbolKind.Parameter:
+                    var parameter = (IParameterSymbol)symbol;
+                    return FromType(parameter.Type, parameter.NullableAnnotation);
+                case SymbolKind.Property:
+                    var property = (IPropertySymbol)symbol;
+                    return FromType(property.Type, property.NullableAnnotation);
+                case SymbolKind.Field:
+                    var field = (IFieldSymbol)symbol;
+                    return FromType(field.Type, field.NullableAnnotation);
+                case SymbolKind.Event:
+                    var ev = (IEventSymbol)symbol;
+                    return FromType(ev.Type, ev.NullableAnnotation);
                 default:
                     throw new NotImplementedException($"External symbol: {symbol.Kind}");
             }

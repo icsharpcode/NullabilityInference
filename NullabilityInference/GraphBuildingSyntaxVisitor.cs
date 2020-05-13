@@ -15,17 +15,52 @@ namespace NullabilityInference
     /// </summary>
     internal abstract class GraphBuildingSyntaxVisitor : CSharpSyntaxVisitor<TypeWithNode>
     {
+
+        public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
+        {
+            return HandleTypeName(node, null);
+        }
+
+        public override TypeWithNode VisitGenericName(GenericNameSyntax node)
+        {
+            return HandleTypeName(node, node.TypeArgumentList.Arguments);
+        }
+
+        public override TypeWithNode VisitPredefinedType(PredefinedTypeSyntax node)
+        {
+            return HandleTypeName(node, null);
+        }
+
         public override TypeWithNode VisitQualifiedName(QualifiedNameSyntax node)
         {
-            node.Left.Accept(this);
-            return node.Right.Accept(this);
+            List<TypeSyntax> typeArgs = new List<TypeSyntax>();
+            CollectTypeArgs(node.Left);
+            CollectTypeArgs(node.Right);
+            return HandleTypeName(node, typeArgs);
+
+            void CollectTypeArgs(TypeSyntax s)
+            {
+                switch (s) {
+                    case QualifiedNameSyntax qns:
+                        CollectTypeArgs(qns.Left);
+                        CollectTypeArgs(qns.Right);
+                        break;
+                    case AliasQualifiedNameSyntax aqns:
+                        CollectTypeArgs(aqns.Name);
+                        break;
+                    case GenericNameSyntax gns:
+                        typeArgs.AddRange(gns.TypeArgumentList.Arguments);
+                        break;
+                }
+            }
         }
 
         public override TypeWithNode VisitAliasQualifiedName(AliasQualifiedNameSyntax node)
         {
-            node.Alias.Accept(this);
-            return node.Name.Accept(this);
+            return HandleTypeName(node, (node.Name as GenericNameSyntax)?.TypeArgumentList.Arguments);
         }
+
+        protected abstract TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments);
 
         public override TypeWithNode VisitNullableType(NullableTypeSyntax node)
         {
@@ -38,6 +73,20 @@ namespace NullabilityInference
                 // Ignore existing nullable reference types; we'll infer them again from scratch.
                 return ty;
             }
+        }
+
+        /// <summary>
+        /// Gets whether it is syntactically possible to add a `NullableTypeSyntax` around the given node.
+        /// </summary>
+        internal static bool CanBeMadeNullableSyntax(TypeSyntax node)
+        {
+            if (node is IdentifierNameSyntax { IsVar: true })
+                return false;
+            if (node.Parent is ObjectCreationExpressionSyntax)
+                return false;
+            if (node.Parent is QualifiedNameSyntax)
+                return false;
+            return true;
         }
     }
 }

@@ -1,8 +1,10 @@
 ﻿// Copyright (c) 2020 Daniel Grunwald
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -35,8 +37,14 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitBlock(IBlockOperation operation, EdgeBuildingContext argument)
         {
+            int oldVariableCount = localVariables.Count;
             foreach (var child in operation.Operations)
                 child.Accept(this, argument);
+            // clean up all variables added within the block
+            while (localVariables.Count > oldVariableCount) {
+                localVarTypes.Remove(localVariables[localVariables.Count - 1]);
+                localVariables.RemoveAt(localVariables.Count - 1);
+            }
             return typeSystem.VoidType;
         }
 
@@ -97,7 +105,9 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitLocalReference(ILocalReferenceOperation operation, EdgeBuildingContext argument)
         {
-            var variableType = typeSystem.GetSymbolType(operation.Local);
+            if (!localVarTypes.TryGetValue(operation.Local, out TypeWithNode variableType)) {
+                variableType = typeSystem.GetSymbolType(operation.Local);
+            }
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 variableType = variableType.WithNode(typeSystem.NonNullNode);
             }
@@ -118,6 +128,8 @@ namespace NullabilityInference
             switch (operation.ReferenceKind) {
                 case InstanceReferenceKind.ContainingTypeInstance:
                     return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+                case InstanceReferenceKind.ImplicitReceiver:
+                    return currentObjectCreationType;
                 default:
                     throw new NotImplementedException(operation.ReferenceKind.ToString());
             }
@@ -175,14 +187,22 @@ namespace NullabilityInference
             return argumentType;
         }
 
+        private TypeWithNode currentObjectCreationType;
+
         public override TypeWithNode VisitObjectCreation(IObjectCreationOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children)
-                child.Accept(this, argument);
-            if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
-                return syntax.Type.Accept(syntaxVisitor);
-            } else {
-                throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
+            var oldObjectCreationType = currentObjectCreationType;
+            try {
+                if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
+                    currentObjectCreationType = syntax.Type.Accept(syntaxVisitor);
+                    foreach (var child in operation.Children)
+                        child.Accept(this, argument);
+                    return currentObjectCreationType;
+                } else {
+                    throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
+                }
+            } finally {
+                currentObjectCreationType = oldObjectCreationType;
             }
         }
 
@@ -201,15 +221,25 @@ namespace NullabilityInference
         {
             if (operation.OperatorMethod != null)
                 throw new NotImplementedException("Overloaded conversion operator");
-            // TODO: adjust return type
-            return operation.Operand.Accept(this, argument);
+            var input = operation.Operand.Accept(this, argument);
+            var conv = operation.GetConversion();
+            if (conv.IsThrow) {
+                return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
+            } else if (conv.IsReference) {
+                if (operation.Type is INamedTypeSymbol { Arity: 0 }) {
+                    return new TypeWithNode(operation.Type, input.Node);
+                } else {
+                    throw new NotImplementedException($"Generic conversion: {conv}");
+                }
+            } else {
+                throw new NotImplementedException($"Unknown conversion: {conv}");
+            }
         }
 
         public override TypeWithNode VisitSimpleAssignment(ISimpleAssignmentOperation operation, EdgeBuildingContext argument)
         {
             var target = operation.Target.Accept(this, argument);
             var value = operation.Value.Accept(this, argument);
-            Debug.Assert(SymbolEqualityComparer.Default.Equals(target.Type, value.Type));
             var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: target);
             edge?.SetLabel("Assign", operation.Syntax?.GetLocation());
             return target;
@@ -223,10 +253,24 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        private readonly Dictionary<ILocalSymbol, TypeWithNode> localVarTypes = new Dictionary<ILocalSymbol, TypeWithNode>();
+        private readonly List<ILocalSymbol> localVariables = new List<ILocalSymbol>(); // used to remove dictionary entries at end of block
+
         public override TypeWithNode VisitVariableDeclaration(IVariableDeclarationOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children) {
-                child.Accept(this, argument);
+            if (operation.Syntax is VariableDeclarationSyntax { Type: SimpleNameSyntax { IsVar: true } }) {
+                // Implicitly typed local variable.
+                // We syntactically can't use "var?", an implicitly typed variable is forced to use
+                // the same nullability as inferred from its initializer expression.
+                foreach (var decl in operation.Declarators) {
+                    var init = decl.Initializer.Accept(this, argument);
+                    localVarTypes.Add(decl.Symbol, init);
+                    localVariables.Add(decl.Symbol);
+                }
+            } else {
+                foreach (var child in operation.Children) {
+                    child.Accept(this, argument);
+                }
             }
             return typeSystem.VoidType;
         }
@@ -236,7 +280,6 @@ namespace NullabilityInference
             var variableType = typeSystem.GetSymbolType(operation.Symbol);
             if (operation.Initializer != null) {
                 var init = operation.Initializer.Accept(this, argument);
-                Debug.Assert(SymbolEqualityComparer.Default.Equals(variableType.Type, init.Type));
                 var edge = syntaxVisitor.CreateAssignmentEdge(source: init, target: variableType);
                 edge?.SetLabel("VarInit", operation.Syntax?.GetLocation());
             }
@@ -246,6 +289,14 @@ namespace NullabilityInference
         public override TypeWithNode VisitVariableInitializer(IVariableInitializerOperation operation, EdgeBuildingContext argument)
         {
             return operation.Value.Accept(this, argument);
+        }
+
+        public override TypeWithNode VisitObjectOrCollectionInitializer(IObjectOrCollectionInitializerOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children) {
+                child.Accept(this, argument);
+            }
+            return typeSystem.VoidType;
         }
     }
 }

@@ -45,7 +45,16 @@ namespace NullabilityInference
 
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
+            if (node.IsVar) {
+                // can't use `var?`
+                return base.VisitIdentifierName(node);
+            }
             return HandleTypeName(node, base.VisitIdentifierName(node));
+        }
+
+        public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
+        {
+            return HandleTypeName(node, base.VisitGenericName(node));
         }
 
         public override SyntaxNode? VisitPredefinedType(PredefinedTypeSyntax node)
@@ -53,10 +62,16 @@ namespace NullabilityInference
             return HandleTypeName(node, base.VisitPredefinedType(node));
         }
 
+        public override SyntaxNode? VisitQualifiedName(QualifiedNameSyntax node)
+        {
+            return HandleTypeName(node, base.VisitQualifiedName(node));
+        }
+
         private SyntaxNode? HandleTypeName(TypeSyntax node, SyntaxNode? newNode)
         {
-            if (node.Parent is ObjectCreationExpressionSyntax)
+            if (!NodeBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node)) {
                 return newNode;
+            }
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true } && newNode is TypeSyntax newTypeSyntax) {
                 return SyntaxFactory.NullableType(
