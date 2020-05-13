@@ -26,6 +26,7 @@ namespace NullabilityInference
         private readonly TypeSystem typeSystem;
         private readonly CancellationToken cancellationToken;
         private readonly SyntaxToNodeMapping mapping;
+        private readonly EdgeBuildingOperationVisitor operationVisitor;
 
         public EdgeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem typeSystem, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
         {
@@ -33,17 +34,34 @@ namespace NullabilityInference
             this.typeSystem = typeSystem;
             this.cancellationToken = cancellationToken;
             this.mapping = mapping;
+            this.operationVisitor = new EdgeBuildingOperationVisitor(this, typeSystem);
         }
 
         public override TypeWithNode DefaultVisit(SyntaxNode node)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (node is ExpressionSyntax)
-                throw new NotImplementedException(node.Kind().ToString());
+            if (node is ExpressionSyntax) {
+                if (node is TypeSyntax) {
+                    throw new NotImplementedException(node.Kind().ToString());
+                } else {
+                    return HandleAsOperation(node);
+                }
+            } else if (node is StatementSyntax) {
+                return HandleAsOperation(node);
+            }
+
             foreach (var child in node.ChildNodes()) {
                 Visit(child);
             }
             return typeSystem.VoidType;
+        }
+
+        private TypeWithNode HandleAsOperation(SyntaxNode node)
+        {
+            var operation = semanticModel.GetOperation(node, cancellationToken);
+            if (operation == null)
+                throw new NotSupportedException($"Could not get operation for {node}");
+            return operation.Accept(operationVisitor, new EdgeBuildingContext());
         }
 
         /// <summary>
@@ -85,6 +103,12 @@ namespace NullabilityInference
                         return typeSystem.FromType(typeInfo.Type, typeInfo.Nullability.Annotation);
                 }
             }
+        }
+
+        internal bool IsNonNullFlow(SyntaxNode syntax)
+        {
+            var typeInfo = semanticModel.GetTypeInfo(syntax, cancellationToken);
+            return typeInfo.Nullability.FlowState == NullableFlowState.NotNull;
         }
 
         public override TypeWithNode VisitPredefinedType(PredefinedTypeSyntax node)
@@ -198,39 +222,7 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
-        public override TypeWithNode VisitAssignmentExpression(AssignmentExpressionSyntax node)
-        {
-            var lhs = VisitAndConvert(node.Left);
-            var rhs = VisitAndConvert(node.Right);
-            Debug.Assert(SymbolEqualityComparer.Default.Equals(lhs.Type, rhs.Type));
-            var edge = CreateAssignmentEdge(source: rhs, target: lhs);
-            edge?.SetLabel("Assign", node.OperatorToken.GetLocation());
-            return lhs;
-        }
-
-        public override TypeWithNode VisitBinaryExpression(BinaryExpressionSyntax node)
-        {
-            var lhs = VisitAndConvert(node.Left);
-            var rhs = VisitAndConvert(node.Right);
-            switch (node.Kind()) {
-                case SyntaxKind.CoalesceExpression:
-                    // TODO: handle generics (IEnumerable<string?>? ?? IEnumerable<string>) -> IEnumerable<string?>
-                    return rhs;
-                case SyntaxKind.EqualsExpression:
-                    // TODO: handle overloaded operators
-                    return typeSystem.VoidType;
-                default:
-                    throw new NotImplementedException(node.Kind().ToString());
-            }
-        }
-
-        public override TypeWithNode VisitThisExpression(ThisExpressionSyntax node)
-        {
-            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
-            return new TypeWithNode(typeInfo.Type, typeSystem.NonNullNode);
-        }
-
-        private TypeWithNode currentMethodReturnType;
+        internal TypeWithNode currentMethodReturnType;
 
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
@@ -242,29 +234,13 @@ namespace NullabilityInference
                 } else {
                     currentMethodReturnType = typeSystem.VoidType;
                 }
-                node.Body?.Accept(this);
-                if (node.ExpressionBody != null) {
-                    var returnType = VisitAndConvert(node.ExpressionBody.Expression);
-                    var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
-                    edge?.SetLabel("return", node.ExpressionBody.GetLocation());
-                }
+                return HandleAsOperation(node);
             } finally {
                 currentMethodReturnType = outerMethodReturnType;
             }
-            return typeSystem.VoidType;
         }
 
-        public override TypeWithNode VisitReturnStatement(ReturnStatementSyntax node)
-        {
-            if (node.Expression != null) {
-                var returnType = VisitAndConvert(node.Expression);
-                var edge = CreateAssignmentEdge(source: returnType, target: currentMethodReturnType);
-                edge?.SetLabel("return", node.GetLocation());
-            }
-            return typeSystem.VoidType;
-        }
-
-        private NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
+        internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
         {
             // TODO: generics
             return CreateEdge(source.Node, target.Node);
@@ -279,7 +255,7 @@ namespace NullabilityInference
         /// <summary>
         /// Creates an edge source->target.
         /// </summary>
-        private NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
+        internal NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
         {
             // Ignore a bunch of special cases where the edge won't have any effect on the overall result:
             if (source == target) {

@@ -33,10 +33,13 @@ namespace NullabilityInference
         }
 
         [Conditional("DEBUG")]
-        internal void SetLabel(string text, Location location)
+        internal void SetLabel(string text, Location? location)
         {
 #if DEBUG
-            this.Label = text + " at " + location.StartPosToString();
+            if (location == null)
+                this.Label = text;
+            else
+                this.Label = text + " at " + location.StartPosToString();
 #endif
         }
     }

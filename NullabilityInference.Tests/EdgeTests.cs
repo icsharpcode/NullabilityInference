@@ -133,6 +133,22 @@ class Program {
         }
 
         [Fact]
+        public void UseLocalWithNullCheck()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input)
+    {
+        string local = input;
+        if (local == null) {
+            return ""null"";
+        }
+        return local;
+    }
+}"));
+        }
+
+        [Fact]
         public void UseField()
         {
             Assert.True(HasPathFromParameterToReturnType(@"

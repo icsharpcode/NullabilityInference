@@ -83,6 +83,7 @@ This separates the graph into essentially three parts:
   * nodes reachable from `nullable` --> must be made nullable
   * nodes that reach `nonnull` --> must not be made nullable
   * remaining nodes --> either choice would work
+
 The removed edges correspond to the assignments that will produce warnings after we insert `?` for the types inferred as nullable.
 Thus the minimum cut ends up finding a solution that minimizes the number of compiler warnings.
 
