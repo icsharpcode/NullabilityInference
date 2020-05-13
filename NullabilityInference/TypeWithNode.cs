@@ -1,4 +1,6 @@
-﻿using System.Diagnostics;
+﻿// Copyright (c) 2020 Daniel Grunwald
+
+using System.Diagnostics;
 using Microsoft.CodeAnalysis;
 
 namespace NullabilityInference

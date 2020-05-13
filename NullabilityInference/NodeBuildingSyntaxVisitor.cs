@@ -1,7 +1,7 @@
-﻿using System;
+﻿// Copyright (c) 2020 Daniel Grunwald
+
 using System.Collections.Generic;
 using System.Diagnostics;
-using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -122,9 +122,24 @@ namespace NullabilityInference
             if (symbol != null) {
                 typeSystem.AddSymbolType(symbol, returnType);
             }
-            node.ParameterList.Accept(this);
-            node.Body?.Accept(this);
-            node.ExpressionBody?.Accept(this);
+            foreach (var child in node.ChildNodes()) {
+                if (child != node.ReturnType)
+                    Visit(child);
+            }
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            var returnType = node.Type.Accept(this);
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol != null) {
+                typeSystem.AddSymbolType(symbol, returnType);
+            }
+            foreach (var child in node.ChildNodes()) {
+                if (child != node.Type)
+                    Visit(child);
+            }
             return typeSystem.VoidType;
         }
     }

@@ -1,8 +1,9 @@
-﻿using System;
+﻿// Copyright (c) 2020 Daniel Grunwald
+
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 

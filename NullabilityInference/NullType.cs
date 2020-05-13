@@ -1,6 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+﻿// Copyright (c) 2020 Daniel Grunwald
 
 namespace NullabilityInference
 {

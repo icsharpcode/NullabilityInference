@@ -1,9 +1,8 @@
-﻿using System;
-using System.Collections.Generic;
+﻿// Copyright (c) 2020 Daniel Grunwald
+
+using System;
 using System.Diagnostics;
-using System.Text;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -140,6 +139,21 @@ namespace NullabilityInference
                 fieldType = fieldType.WithNode(typeSystem.NonNullNode);
             }
             return fieldType;
+        }
+
+        public override TypeWithNode VisitPropertyReference(IPropertyReferenceOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.Instance != null) {
+                Dereference(operation.Instance.Accept(this, argument), operation);
+            }
+            foreach (var arg in operation.Arguments) {
+                arg.Accept(this, argument);
+            }
+            var propertyType = typeSystem.GetSymbolType(operation.Property);
+            if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
+                propertyType = propertyType.WithNode(typeSystem.NonNullNode);
+            }
+            return propertyType;
         }
 
         public override TypeWithNode VisitInvocation(IInvocationOperation operation, EdgeBuildingContext argument)

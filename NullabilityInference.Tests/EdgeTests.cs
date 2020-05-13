@@ -1,14 +1,9 @@
-﻿using System;
+﻿// Copyright (c) 2020 Daniel Grunwald
+
+using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using ICSharpCode.CodeConverter.Util;
-using NullabilityInference;
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 
 namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
@@ -16,37 +11,11 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
     /// <summary>
     /// Unit tests where we check that an edge from parameter to return type was detected.
     /// </summary>
-    public class EdgeTests
+    public class EdgeTests :  NullabilityTestHelper
     {
-        private static readonly string refAsmPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            @"Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2");
-        private static readonly Lazy<IEnumerable<MetadataReference>> defaultReferences = new Lazy<IEnumerable<MetadataReference>>(delegate {
-            return new[]
-            {
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "Facades\\netstandard.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "mscorlib.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Core.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, @"Facades\System.Runtime.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Xml.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "Microsoft.CSharp.dll")),
-                    MetadataReference.CreateFromFile(typeof(ValueTuple).Assembly.Location),
-                    MetadataReference.CreateFromFile(typeof(ValueTask).Assembly.Location),
-                    MetadataReference.CreateFromFile(typeof(Span<>).Assembly.Location),
-            };
-        });
-
-        private static bool HasPathFromParameterToReturnType(string program)
+        public static bool HasPathFromParameterToReturnType(string program)
         {
-            var syntaxTree = SyntaxFactory.ParseSyntaxTree(program);
-            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Warnings);
-            var compilation = CSharpCompilation.Create("test", new[] { syntaxTree }, defaultReferences.Value, options);
-            compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, CancellationToken.None);
-            foreach (var diag in compilation.GetDiagnostics()) {
-                Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString());
-            }
-            var engine = new NullCheckingEngine(compilation);
-            engine.Analyze(CancellationToken.None);
+            var (compilation, engine) = CompileAndAnalyze(program);
             var programClass = compilation.GetTypeByMetadataName("Program");
             Assert.False(programClass == null, "Could not find 'Program' in test");
             var testMethod = programClass!.GetMembers("Test").Single();
@@ -177,6 +146,39 @@ class Program {
             return ""null"";
         }
         return field;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UseProperty()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    static string Property { get; set; }
+
+    public static string Test(string input)
+    {
+        Property = input;
+        return Property;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UsePropertyWithNullCheck()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    static string Property { get; set; }
+
+    public static string Test(string input)
+    {
+        Property = input;
+        if (Property == null) {
+            return ""null"";
+        }
+        return Property;
     }
 }"));
         }
