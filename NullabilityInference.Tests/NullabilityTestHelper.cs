@@ -4,8 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using ICSharpCode.CodeConverter.Util;
 using NullabilityInference;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -52,12 +54,51 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
             var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
             var compilation = CSharpCompilation.Create("test", new[] { syntaxTree }, defaultReferences.Value, options);
             compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
+            string allNullableText = compilation.SyntaxTrees.Single().GetText().ToString();
             foreach (var diag in compilation.GetDiagnostics(cancellationToken)) {
                 Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString());
             }
             var engine = new NullCheckingEngine(compilation);
             engine.Analyze(cancellationToken);
             return (compilation, engine);
+        }
+
+        protected static void AssertNullabilityInference(string expectedProgram, string inputProgram = null, CancellationToken cancellationToken = default)
+        {
+            inputProgram ??= expectedProgram.Replace("?", "");
+            var (_, engine) = CompileAndAnalyze(inputProgram, cancellationToken);
+            var newSyntax = engine.ConvertSyntaxTrees(cancellationToken).Single();
+            string outputProgram = newSyntax.GetText(cancellationToken).ToString();
+            // engine.ExportTypeGraph().Show();
+            Assert.Equal(expectedProgram, outputProgram);
+        }
+
+        protected static bool HasPathFromParameterToReturnType(string program)
+        {
+            var (compilation, engine) = CompileAndAnalyze(program);
+            var programClass = compilation.GetTypeByMetadataName("Program");
+            Assert.False(programClass == null, "Could not find 'Program' in test");
+            var testMethod = programClass!.GetMembers("Test").Single();
+            var parameterNode = engine.TypeSystem.GetSymbolType(testMethod.GetParameters().Single()).Node;
+            var returnNode = engine.TypeSystem.GetSymbolType(testMethod).Node;
+            // engine.ExportTypeGraph().Show();
+            return ReachableNodes(parameterNode, n => n.Successors).Contains(returnNode);
+        }
+
+        private static HashSet<T> ReachableNodes<T>(T root, Func<T, IEnumerable<T>> successors)
+        {
+            var visited = new HashSet<T>();
+            Visit(root);
+            return visited;
+
+            void Visit(T node)
+            {
+                if (visited.Add(node)) {
+                    foreach (var successor in successors(node)) {
+                        Visit(successor);
+                    }
+                }
+            }
         }
     }
 }

@@ -84,7 +84,7 @@ namespace NullabilityInference
                 return false;
             if (node.Parent is ObjectCreationExpressionSyntax)
                 return false;
-            if (node.Parent is QualifiedNameSyntax)
+            if (node.Parent is QualifiedNameSyntax || node.Parent is MemberAccessExpressionSyntax)
                 return false;
             return true;
         }

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -40,7 +41,7 @@ namespace NullabilityInference
 
         public NullType NullType = NullType.Infer;
 
-        internal virtual void AddNameFromSymbol(ISymbol symbol)
+        internal virtual void SetName(string name)
         {
         }
     }
@@ -82,9 +83,18 @@ namespace NullabilityInference
 
         public override string Name => $"{symbolName}#{id}";
 
-        internal override void AddNameFromSymbol(ISymbol symbol)
+        internal override void SetName(string name)
         {
-            symbolName ??= symbol.Name;
+            symbolName ??= name;
         }
+    }
+
+    internal sealed class TemporaryNullabilityNode : NullabilityNode
+    {
+        private static long nextId;
+        private readonly long id = Interlocked.Increment(ref nextId);
+
+        public override Location? Location => null;
+        public override string Name => $"<temp#{id}>";
     }
 }

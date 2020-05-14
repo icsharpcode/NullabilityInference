@@ -29,6 +29,9 @@ namespace NullabilityInference
         private readonly SyntaxToNodeMapping mapping;
         private readonly EdgeBuildingOperationVisitor operationVisitor;
 
+        internal readonly List<NullabilityNode> NewNodes = new List<NullabilityNode>();
+        internal readonly List<NullabilityEdge> NewEdges = new List<NullabilityEdge>();
+
         public EdgeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem typeSystem, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
         {
             this.semanticModel = semanticModel;
@@ -83,8 +86,18 @@ namespace NullabilityInference
                     } else {
                         return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                     }
-                default:
+                case SymbolKind.TypeParameter:
+                    var tp = (ITypeParameterSymbol)symbolInfo.Symbol;
+                    if (tp.HasReferenceTypeConstraint && CanBeMadeNullableSyntax(node)) {
+                        return new TypeWithNode(tp, mapping[node], typeArgs);
+                    } else {
+                        return new TypeWithNode(tp, typeSystem.ObliviousNode, typeArgs);
+                    }
+                case SymbolKind.PointerType:
+                case SymbolKind.ArrayType:
                     throw new NotImplementedException(symbolInfo.Symbol.Kind.ToString());
+                default:
+                    return typeSystem.VoidType;
             }
         }
 
@@ -108,49 +121,71 @@ namespace NullabilityInference
 
         internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
         {
+            return CreateTypeEdge(source, target, null, VarianceKind.Out);
+        }
+
+        internal NullabilityEdge? CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance)
+        {
+            if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
+                // Perform the substitution:
+                target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
+                targetSubstitution = null;
+            }
             Debug.Assert(SymbolEqualityComparer.Default.Equals(source.Type, target.Type));
             if (source.Type is INamedTypeSymbol namedType) {
                 Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
                 Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);
                 for (int i = 0; i < namedType.TypeParameters.Length; i++) {
-                    var tp = namedType.TypeParameters[i];
+                    tp = namedType.TypeParameters[i];
                     var sourceArg = source.TypeArguments[i];
                     var targetArg = target.TypeArguments[i];
-                    switch (tp.Variance) {
-                        case VarianceKind.None:
-                            // List<string> --/--> IEnumerable<string?>
-                            CreateBidirectionalEdge(sourceArg, targetArg);
-                            break;
-                        case VarianceKind.Out:
-                            // IEnumerable<string> --> IEnumerable<string?>
-                            CreateAssignmentEdge(sourceArg, targetArg);
-                            break;
-                        case VarianceKind.In:
-                            // IComparable<string?> --> IComparable<string>
-                            CreateAssignmentEdge(targetArg, sourceArg);
-                            break;
-                    }
+                    var combinedVariance = (variance, tp.Variance) switch
+                    {
+                        (VarianceKind.None, _) => VarianceKind.None,
+                        (VarianceKind.Out, var x) => x,
+                        (VarianceKind.In, VarianceKind.None) => VarianceKind.None,
+                        (VarianceKind.In, VarianceKind.Out) => VarianceKind.In,
+                        (VarianceKind.In, VarianceKind.In) => VarianceKind.Out,
+                        _ => throw new NotSupportedException("Unknown VarianceKind")
+                    };
+                    CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
                 }
+            } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {
+                CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance);
             }
-            return CreateEdge(source.Node, target.Node);
+            if (variance == VarianceKind.In || variance == VarianceKind.None)
+                CreateEdge(target.Node, source.Node);
+            if (variance == VarianceKind.Out || variance == VarianceKind.None)
+                return CreateEdge(source.Node, target.Node);
+            else
+                return null;
         }
 
-        private void CreateBidirectionalEdge(TypeWithNode source, TypeWithNode target)
+        /// <summary>
+        /// Create temporary type nodes for the specified type.
+        /// </summary>
+        internal TypeWithNode CreateTemporaryType(ITypeSymbol type)
         {
-            CreateEdge(source.Node, target.Node);
-            CreateEdge(target.Node, source.Node);
-
-            Debug.Assert(SymbolEqualityComparer.Default.Equals(source.Type, target.Type));
-            Debug.Assert(source.TypeArguments.Count == target.TypeArguments.Count);
-            foreach (var (s, t) in source.TypeArguments.Zip(target.TypeArguments)) {
-                CreateBidirectionalEdge(s, t);
+            if (type is INamedTypeSymbol nts) {
+                var typeArgs = nts.TypeArguments.Select(CreateTemporaryType).ToArray();
+                if (nts.IsReferenceType) {
+                    return new TypeWithNode(nts, CreateTemporaryNode(), typeArgs);
+                } else {
+                    return new TypeWithNode(nts, typeSystem.ObliviousNode, typeArgs);
+                }
+            } else if (type is IArrayTypeSymbol ats) {
+                return new TypeWithNode(ats, CreateTemporaryNode(), new[] { CreateTemporaryType(ats.ElementType) });
+            } else if (type is IPointerTypeSymbol pts) {
+                return new TypeWithNode(pts, CreateTemporaryNode(), new[] { CreateTemporaryType(pts.PointedAtType) });
             }
+            return new TypeWithNode(type, typeSystem.ObliviousNode);
         }
 
-        private void Dereference(TypeWithNode type, in SyntaxToken derefToken)
+        internal NullabilityNode CreateTemporaryNode()
         {
-            var edge = CreateEdge(type.Node, typeSystem.NonNullNode);
-            edge?.SetLabel("Deref", derefToken.GetLocation());
+            var node = new TemporaryNullabilityNode();
+            NewNodes.Add(node);
+            return node;
         }
 
         /// <summary>
@@ -169,8 +204,8 @@ namespace NullabilityInference
                 return null;
             }
             var edge = new NullabilityEdge(source, target);
-            lock (source.OutgoingEdges) source.OutgoingEdges.Add(edge);
-            lock (target.IncomingEdges) target.IncomingEdges.Add(edge);
+            Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
+            NewEdges.Add(edge);
             return edge;
         }
     }

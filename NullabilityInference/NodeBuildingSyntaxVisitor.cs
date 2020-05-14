@@ -139,5 +139,14 @@ namespace NullabilityInference
             }
             return typeSystem.VoidType;
         }
+
+        public override TypeWithNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
+        {
+            var typeNode = node.Type.Accept(this);
+            typeNode.SetName("new");
+            node.ArgumentList?.Accept(this);
+            node.Initializer?.Accept(this);
+            return typeNode;
+        }
     }
 }

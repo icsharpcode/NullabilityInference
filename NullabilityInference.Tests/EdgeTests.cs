@@ -1,9 +1,5 @@
 ﻿// Copyright (c) 2020 Daniel Grunwald
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using ICSharpCode.CodeConverter.Util;
 using Xunit;
 
 namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
@@ -11,36 +7,8 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
     /// <summary>
     /// Unit tests where we check that an edge from parameter to return type was detected.
     /// </summary>
-    public class EdgeTests :  NullabilityTestHelper
+    public class EdgeTests : NullabilityTestHelper
     {
-        public static bool HasPathFromParameterToReturnType(string program)
-        {
-            var (compilation, engine) = CompileAndAnalyze(program);
-            var programClass = compilation.GetTypeByMetadataName("Program");
-            Assert.False(programClass == null, "Could not find 'Program' in test");
-            var testMethod = programClass!.GetMembers("Test").Single();
-            var parameterNode = engine.TypeSystem.GetSymbolType(testMethod.GetParameters().Single()).Node;
-            var returnNode = engine.TypeSystem.GetSymbolType(testMethod).Node;
-            // engine.ExportTypeGraph().Show();
-            return ReachableNodes(parameterNode, n => n.Successors).Contains(returnNode);
-        }
-
-        private static HashSet<T> ReachableNodes<T>(T root, Func<T, IEnumerable<T>> successors)
-        {
-            var visited = new HashSet<T>();
-            Visit(root);
-            return visited;
-
-            void Visit(T node)
-            {
-                if (visited.Add(node)) {
-                    foreach (var successor in successors(node)) {
-                        Visit(successor);
-                    }
-                }
-            }
-        }
-
         [Fact]
         public void SimpleReturn()
         {

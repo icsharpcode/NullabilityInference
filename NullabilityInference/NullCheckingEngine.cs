@@ -110,6 +110,10 @@ namespace NullabilityInference
             var semanticModel = compilation.GetSemanticModel(syntaxTree);
             var visitor = new EdgeBuildingSyntaxVisitor(semanticModel, typeSystem, typeSystem.GetMapping(syntaxTree), cancellationToken);
             visitor.Visit(syntaxTree.GetRoot(cancellationToken));
+            lock (typeSystem) {
+                typeSystem.RegisterNodes(visitor.NewNodes);
+                typeSystem.RegisterEdges(visitor.NewEdges);
+            }
         }
 
         public GraphVizGraph ExportTypeGraph()
@@ -163,7 +167,7 @@ namespace NullabilityInference
 
             string Escape(string name)
             {
-                return name.Replace('#', '_');
+                return name.Replace('#', '_').Replace('!', '_');
             }
         }
 

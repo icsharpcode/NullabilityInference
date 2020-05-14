@@ -16,6 +16,7 @@ namespace NullabilityInference
         private readonly Compilation compilation;
         private readonly Dictionary<SyntaxTree, SyntaxToNodeMapping> syntaxMapping = new Dictionary<SyntaxTree, SyntaxToNodeMapping>();
         private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
+        private readonly List<NullabilityNode> additionalNodes = new List<NullabilityNode>();
 
 
         private readonly INamedTypeSymbol voidType;
@@ -77,6 +78,9 @@ namespace NullabilityInference
                         yield return node;
                     }
                 }
+                foreach (var node in additionalNodes) {
+                    yield return node;
+                }
             }
         }
 
@@ -125,7 +129,7 @@ namespace NullabilityInference
 
             public void AddSymbolType(ISymbol symbol, TypeWithNode type)
             {
-                type.Node.AddNameFromSymbol(symbol);
+                type.SetName(symbol.Name);
                 AddAction(ts => ts.symbolType.Add(symbol, type));
             }
 
@@ -142,6 +146,18 @@ namespace NullabilityInference
                     action(typeSystem);
                 }
                 cachedActions.Clear();
+            }
+        }
+
+        internal void RegisterNodes(IEnumerable<NullabilityNode> newNodes)
+        {
+            additionalNodes.AddRange(newNodes);
+        }
+        internal void RegisterEdges(IEnumerable<NullabilityEdge> newEdges)
+        {
+            foreach (var edge in newEdges) {
+                edge.Source.OutgoingEdges.Add(edge);
+                edge.Target.IncomingEdges.Add(edge);
             }
         }
     }

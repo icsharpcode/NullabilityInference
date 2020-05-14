@@ -2,7 +2,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -135,18 +137,21 @@ namespace NullabilityInference
             }
         }
 
-        private void Dereference(TypeWithNode type, IOperation dereferencingOperation)
+        private void Dereference(TypeWithNode? type, IOperation dereferencingOperation)
         {
-            var edge = syntaxVisitor.CreateEdge(type.Node, typeSystem.NonNullNode);
-            edge?.SetLabel("Deref", dereferencingOperation.Syntax.GetLocation());
+            if (type != null) {
+                var edge = syntaxVisitor.CreateEdge(type.Value.Node, typeSystem.NonNullNode);
+                edge?.SetLabel("Deref", dereferencingOperation.Syntax.GetLocation());
+            }
         }
 
         public override TypeWithNode VisitFieldReference(IFieldReferenceOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.Instance != null) {
-                Dereference(operation.Instance.Accept(this, argument), operation);
-            }
-            var fieldType = typeSystem.GetSymbolType(operation.Field);
+            var receiverType = operation.Instance?.Accept(this, argument);
+            Dereference(receiverType, operation);
+            var substitution = new TypeSubstitution(receiverType?.TypeArguments ?? new TypeWithNode[0], new TypeWithNode[0]);
+            var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
+            fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 fieldType = fieldType.WithNode(typeSystem.NonNullNode);
             }
@@ -155,13 +160,11 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitPropertyReference(IPropertyReferenceOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.Instance != null) {
-                Dereference(operation.Instance.Accept(this, argument), operation);
-            }
-            foreach (var arg in operation.Arguments) {
-                arg.Accept(this, argument);
-            }
-            var propertyType = typeSystem.GetSymbolType(operation.Property);
+            var receiverType = operation.Instance?.Accept(this, argument);
+            Dereference(receiverType, operation);
+            var substitution = HandleArguments(ImmutableArray<ITypeSymbol>.Empty, operation.Arguments, receiverType, context: argument);
+            var propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
+            propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 propertyType = propertyType.WithNode(typeSystem.NonNullNode);
             }
@@ -170,21 +173,30 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitInvocation(IInvocationOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.Instance != null) {
-                Dereference(operation.Instance.Accept(this, argument), operation);
-            }
-            foreach (var arg in operation.Arguments)
-                arg.Accept(this, argument);
-            return typeSystem.GetSymbolType(operation.TargetMethod);
+            var receiverType = operation.Instance?.Accept(this, argument);
+            Dereference(receiverType, operation);
+            var subst = HandleArguments(operation.TargetMethod.TypeArguments, operation.Arguments, receiverType, context: argument);
+            var returnType = typeSystem.GetSymbolType(operation.TargetMethod.OriginalDefinition);
+            returnType = returnType.WithSubstitution(operation.TargetMethod.ReturnType, subst);
+            return returnType;
         }
 
-        public override TypeWithNode VisitArgument(IArgumentOperation operation, EdgeBuildingContext argument)
+        private TypeSubstitution HandleArguments(ImmutableArray<ITypeSymbol> methodTypeArguments, ImmutableArray<IArgumentOperation> arguments, TypeWithNode? receiverType, EdgeBuildingContext context)
         {
-            var parameterType = typeSystem.GetSymbolType(operation.Parameter);
-            var argumentType = operation.Value.Accept(this, argument);
-            var edge = syntaxVisitor.CreateAssignmentEdge(source: argumentType, target: parameterType);
-            edge?.SetLabel("Argument", operation.Syntax?.GetLocation());
-            return argumentType;
+            var classTypeArgNodes = receiverType?.TypeArguments ?? new TypeWithNode[0];
+            var methodTypeArgNodes = methodTypeArguments.Select(syntaxVisitor.CreateTemporaryType).ToArray() ?? new TypeWithNode[0];
+            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+            foreach (var arg in arguments) {
+                var param = arg.Parameter.OriginalDefinition;
+                var parameterType = typeSystem.GetSymbolType(param);
+                var argumentType = arg.Value.Accept(this, context);
+                // Create an assignment edge from argument to parameter.
+                // We use the parameter's original type + substitution so that a type parameter `T` appearing in
+                // multiple parameters uses the same nullability nodes for all occurrences.
+                var edge = syntaxVisitor.CreateTypeEdge(source: argumentType, target: parameterType, substitution, VarianceKind.Out);
+                edge?.SetLabel("Argument", arg.Syntax?.GetLocation());
+            }
+            return substitution;
         }
 
         private TypeWithNode currentObjectCreationType;
@@ -195,8 +207,8 @@ namespace NullabilityInference
             try {
                 if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
                     currentObjectCreationType = syntax.Type.Accept(syntaxVisitor);
-                    foreach (var child in operation.Children)
-                        child.Accept(this, argument);
+                    HandleArguments(operation.Constructor.TypeArguments, operation.Arguments, receiverType: currentObjectCreationType, context: argument);
+                    operation.Initializer?.Accept(this, argument);
                     return currentObjectCreationType;
                 } else {
                     throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
