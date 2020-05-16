@@ -151,6 +151,7 @@ namespace NullabilityInference
                 if (node.Location != null) {
                     gvNode.label += $"\n{node.Location.EndPosToString()}";
                 }
+                //gvNode.label += $"\n{node.NullType}";
                 graph.AddNode(gvNode);
             }
             foreach (NullabilityEdge edge in graphEdges) {

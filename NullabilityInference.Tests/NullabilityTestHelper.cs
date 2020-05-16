@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ICSharpCode.CodeConverter.Util;
@@ -65,7 +66,7 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
 
         protected static void AssertNullabilityInference(string expectedProgram, string inputProgram = null, CancellationToken cancellationToken = default)
         {
-            inputProgram ??= expectedProgram.Replace("?", "");
+            inputProgram ??= Regex.Replace(expectedProgram, "(?<![?])[?](?![?.])", "");
             var (_, engine) = CompileAndAnalyze(inputProgram, cancellationToken);
             var newSyntax = engine.ConvertSyntaxTrees(cancellationToken).Single();
             string outputProgram = newSyntax.GetText(cancellationToken).ToString();

@@ -272,7 +272,11 @@ namespace NullabilityInference
                 // Create an assignment edge from argument to parameter.
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
-                var edge = syntaxVisitor.CreateTypeEdge(source: argumentType, target: parameterType, substitution, VarianceKind.Out);
+                VarianceKind variance = param.RefKind switch {
+                    RefKind.None => VarianceKind.Out,
+                    _ => VarianceKind.None
+                };
+                var edge = syntaxVisitor.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance);
                 edge?.SetLabel("Argument", arg.Syntax?.GetLocation());
             }
             return substitution;
@@ -369,6 +373,11 @@ namespace NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitNameOf(INameOfOperation operation, EdgeBuildingContext argument)
+        {
+            return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+        }
+
         public override TypeWithNode VisitConversion(IConversionOperation operation, EdgeBuildingContext argument)
         {
             if (operation.OperatorMethod != null)
@@ -392,6 +401,26 @@ namespace NullabilityInference
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }
+        }
+
+        private TypeWithNode conditionalAccessInstance;
+
+        public override TypeWithNode VisitConditionalAccess(IConditionalAccessOperation operation, EdgeBuildingContext argument)
+        {
+            var oldConditionalAccessInstance = conditionalAccessInstance;
+            try {
+                var target = operation.Operation.Accept(this, argument);
+                conditionalAccessInstance = target.WithNode(typeSystem.NonNullNode);
+                var value = operation.WhenNotNull.Accept(this, argument);
+                return value.WithNode(typeSystem.NullableNode);
+            } finally {
+                conditionalAccessInstance = oldConditionalAccessInstance;
+            }
+        }
+
+        public override TypeWithNode VisitConditionalAccessInstance(IConditionalAccessInstanceOperation operation, EdgeBuildingContext argument)
+        {
+            return conditionalAccessInstance;
         }
 
         public override TypeWithNode VisitSimpleAssignment(ISimpleAssignmentOperation operation, EdgeBuildingContext argument)

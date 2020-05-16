@@ -267,5 +267,26 @@ class Program {
 }");
         }
 
+        [Fact]
+        public void CallbackOnDispose()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Threading;
+public sealed class CallbackOnDispose : IDisposable
+{
+	Action? action;
+
+	public CallbackOnDispose(Action action)
+	{
+		this.action = action ?? throw new ArgumentNullException(nameof(action));
+	}
+
+	public void Dispose()
+	{
+		Interlocked.Exchange<Action?>(ref action, null)?.Invoke();
+	}
+}");
+        }
     }
 }

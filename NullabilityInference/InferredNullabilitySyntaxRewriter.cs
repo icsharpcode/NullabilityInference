@@ -29,12 +29,17 @@ namespace NullabilityInference
         public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
         {
             var symbolInfo = semanticModel.GetSymbolInfo(node);
-            if (symbolInfo.Symbol is ITypeSymbol { IsValueType: false }) {
+            if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true }) {
                 // Remove existing nullable reference types
                 return node.ElementType.Accept(this).WithTrailingTrivia(node.GetTrailingTrivia());
             } else {
                 return node.ReplaceNode(node.ElementType, node.ElementType.Accept(this));
             }
+        }
+
+        public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+        {
+            return HandleTypeName(node, base.VisitIdentifierName(node));
         }
 
         public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
