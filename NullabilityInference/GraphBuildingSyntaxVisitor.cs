@@ -82,7 +82,7 @@ namespace NullabilityInference
         {
             if (node is IdentifierNameSyntax { IsVar: true })
                 return false;
-            if (node.Parent is ObjectCreationExpressionSyntax)
+            if (node.Parent is ObjectCreationExpressionSyntax || node.Parent is ArrayCreationExpressionSyntax)
                 return false;
             if (node.Parent is QualifiedNameSyntax || node.Parent is MemberAccessExpressionSyntax)
                 return false;

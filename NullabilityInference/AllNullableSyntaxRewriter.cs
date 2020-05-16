@@ -69,7 +69,7 @@ namespace NullabilityInference
 
         private SyntaxNode? HandleTypeName(TypeSyntax node, SyntaxNode? newNode)
         {
-            if (!NodeBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node)) {
+            if (!GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node)) {
                 return newNode;
             }
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
@@ -80,6 +80,19 @@ namespace NullabilityInference
                 ).WithTrailingTrivia(newTypeSyntax.GetTrailingTrivia());
             }
             return newNode;
+        }
+
+        public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
+        {
+            var newNode = base.VisitArrayType(node);
+            if (GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && newNode is TypeSyntax newTypeSyntax) {
+                return SyntaxFactory.NullableType(
+                    elementType: newTypeSyntax.WithoutTrailingTrivia(),
+                    questionToken: SyntaxFactory.Token(SyntaxKind.QuestionToken)
+                ).WithTrailingTrivia(newTypeSyntax.GetTrailingTrivia());
+            } else {
+                return newNode;
+            }
         }
     }
 }

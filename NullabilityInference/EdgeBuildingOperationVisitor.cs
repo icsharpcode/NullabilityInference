@@ -50,6 +50,28 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitForLoop(IForLoopOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitWhileLoop(IWhileLoopOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitBranch(IBranchOperation operation, EdgeBuildingContext argument)
+        {
+            // goto / break / continue
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitExpressionStatement(IExpressionStatementOperation operation, EdgeBuildingContext argument)
         {
             operation.Operation.Accept(this, argument);
@@ -58,11 +80,13 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitReturn(IReturnOperation operation, EdgeBuildingContext argument)
         {
-            var returnVal = operation.ReturnedValue.Accept(this, argument);
-            var edge = syntaxVisitor.CreateAssignmentEdge(
-                source: returnVal,
-                target: syntaxVisitor.currentMethodReturnType);
-            edge?.SetLabel("return", operation.Syntax.GetLocation());
+            if (operation.ReturnedValue != null) {
+                var returnVal = operation.ReturnedValue.Accept(this, argument);
+                var edge = syntaxVisitor.CreateAssignmentEdge(
+                    source: returnVal,
+                    target: syntaxVisitor.currentMethodReturnType);
+                edge?.SetLabel("return", operation.Syntax.GetLocation());
+            }
             return typeSystem.VoidType;
         }
 
@@ -76,13 +100,38 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitUnaryOperator(IUnaryOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.OperatorMethod != null)
+                throw new NotImplementedException("Overloaded operator");
+            operation.Operand.Accept(this, argument);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitIncrementOrDecrement(IIncrementOrDecrementOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.OperatorMethod != null)
+                throw new NotImplementedException("Overloaded operator");
+            operation.Target.Accept(this, argument);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
         public override TypeWithNode VisitBinaryOperator(IBinaryOperation operation, EdgeBuildingContext argument)
         {
             if (operation.OperatorMethod != null)
                 throw new NotImplementedException("Overloaded operator");
             var lhs = operation.LeftOperand.Accept(this, argument);
             var rhs = operation.RightOperand.Accept(this, argument);
-            return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitCompoundAssignment(ICompoundAssignmentOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.OperatorMethod != null)
+                throw new NotImplementedException("Overloaded operator");
+            var lhs = operation.Target.Accept(this, argument);
+            var rhs = operation.Value.Accept(this, argument);
+            return typeSystem.GetObliviousType(operation.Type);
         }
 
         public override TypeWithNode VisitCoalesce(ICoalesceOperation operation, EdgeBuildingContext argument)
@@ -299,8 +348,8 @@ namespace NullabilityInference
                 throw new NotImplementedException("Overloaded conversion operator");
             var input = operation.Operand.Accept(this, argument);
             var conv = operation.GetConversion();
-            if (conv.IsThrow) {
-                return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
+            if (conv.IsThrow || conv.IsConstantExpression) {
+                return typeSystem.GetObliviousType(operation.Type);
             } else if (conv.IsReference) {
                 TypeWithNode targetType;
                 if (conv.IsExplicit && operation.Syntax is CastExpressionSyntax cast) {

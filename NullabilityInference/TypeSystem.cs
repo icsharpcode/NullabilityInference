@@ -172,5 +172,17 @@ namespace NullabilityInference
                 edge.Target.IncomingEdges.Add(edge);
             }
         }
+
+        internal TypeWithNode GetObliviousType(ITypeSymbol type)
+        {
+            if (type is INamedTypeSymbol nts) {
+                return new TypeWithNode(nts, ObliviousNode, nts.TypeArguments.Select(this.GetObliviousType).ToArray());
+            } else if (type is IArrayTypeSymbol ats) {
+                return new TypeWithNode(ats, ObliviousNode, new[] { GetObliviousType(ats.ElementType) });
+            } else if (type is IPointerTypeSymbol pts) {
+                return new TypeWithNode(pts, ObliviousNode, new[] { GetObliviousType(pts.PointedAtType) });
+            }
+            return new TypeWithNode(type, ObliviousNode);
+        }
     }
 }

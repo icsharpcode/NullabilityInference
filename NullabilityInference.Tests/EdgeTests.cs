@@ -307,5 +307,35 @@ class Program {
     public string this[string input] => input;
 }"));
         }
+
+        [Fact]
+        public void CallConstructor()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class C {
+    internal readonly string X;
+    public C(string x) { this.X = x; }
+}
+class Program {
+    public static string Test(string input) {
+        return new C(input).X;
+    }
+}"));
+        }
+
+        [Fact]
+        public void CallConstructorWithArray()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class C {
+    internal readonly ulong[] X;
+    public C(ulong[] x) { this.X = x; }
+}
+class Program {
+    public static ulong[] Test(ulong[] input) {
+        return new C(input).X;
+    }
+}"));
+        }
     }
 }
