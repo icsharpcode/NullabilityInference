@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace NullabilityInference
 {
@@ -33,6 +34,17 @@ namespace NullabilityInference
         public static IEnumerable<(A, B)> Zip<A, B>(this IEnumerable<A> input1, IEnumerable<B> input2)
         {
             return input1.Zip(input2, (a, b) => (a, b));
+        }
+
+        public static bool IsAutoProperty(this PropertyDeclarationSyntax syntax)
+        {
+            if (syntax.ExpressionBody != null || syntax.AccessorList == null || !syntax.AccessorList.Accessors.Any())
+                return false;
+            foreach (var accessor in syntax.AccessorList.Accessors) {
+                if (accessor.Body != null || accessor.ExpressionBody != null)
+                    return false;
+            }
+            return true;
         }
     }
 }

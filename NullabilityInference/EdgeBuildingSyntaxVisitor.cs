@@ -8,6 +8,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace NullabilityInference
 {
@@ -111,6 +112,34 @@ namespace NullabilityInference
 
         internal TypeWithNode currentMethodReturnType;
 
+        public override TypeWithNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
+        {
+            var outerMethodReturnType = currentMethodReturnType;
+            try {
+                currentMethodReturnType = typeSystem.VoidType;
+                var operation = semanticModel.GetOperation(node, cancellationToken);
+                if (operation == null)
+                    throw new NotSupportedException($"Could not get operation for {node}");
+                if (node.Initializer?.ThisOrBaseKeyword.Kind() != SyntaxKind.ThisKeyword) {
+                    HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>();
+                    foreach (var assgn in operation.DescendantsAndSelf().OfType<ISimpleAssignmentOperation>()) {
+                        if (assgn.Target is IFieldReferenceOperation fieldRef) {
+                            initializedSymbols.Add(fieldRef.Field);
+                        } else if (assgn.Target is IPropertyReferenceOperation propertyRef) {
+                            initializedSymbols.Add(propertyRef.Property);
+                        }
+                    }
+                    if (node.Parent is TypeDeclarationSyntax typeSyntax) {
+                        bool isStatic = node.Modifiers.Any(SyntaxKind.StaticKeyword);
+                        MarkFieldsAndPropertiesAsNullable(typeSyntax.Members, isStatic, initializedSymbols, node.GetLocation());
+                    }
+                }
+                return operation.Accept(operationVisitor, new EdgeBuildingContext());
+            } finally {
+                currentMethodReturnType = outerMethodReturnType;
+            }
+        }
+
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
             var outerMethodReturnType = currentMethodReturnType;
@@ -139,6 +168,7 @@ namespace NullabilityInference
                 }
                 node.AccessorList?.Accept(this);
                 node.ExpressionBody?.Accept(this);
+                node.Initializer?.Accept(this);
                 return typeSystem.VoidType;
             } finally {
                 currentMethodReturnType = outerMethodReturnType;
@@ -171,6 +201,62 @@ namespace NullabilityInference
         public override TypeWithNode VisitArrowExpressionClause(ArrowExpressionClauseSyntax node)
         {
             return HandleAsOperation(node);
+        }
+
+        public override TypeWithNode VisitEqualsValueClause(EqualsValueClauseSyntax node)
+        {
+            return HandleAsOperation(node);
+        }
+
+        public override TypeWithNode VisitClassDeclaration(ClassDeclarationSyntax node)
+        {
+            HandleLackOfConstructor(node);
+            return base.VisitClassDeclaration(node);
+        }
+
+        public override TypeWithNode VisitStructDeclaration(StructDeclarationSyntax node)
+        {
+            HandleLackOfConstructor(node);
+            return base.VisitStructDeclaration(node);
+        }
+
+        private void HandleLackOfConstructor(TypeDeclarationSyntax node)
+        {
+            var hasStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
+            var hasNonStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && !ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
+            if (!hasStaticConstructor) {
+                // implicit compiler-generated static constructor initializes all static fields to null
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(), location: null);
+            }
+            if (!hasNonStaticConstructor) {
+                // implicit compiler-generated constructor initializes all instance fields to null
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(), location: null);
+            }
+        }
+
+        private void MarkFieldsAndPropertiesAsNullable(SyntaxList<MemberDeclarationSyntax> members, bool isStatic, HashSet<ISymbol> initializedMembers, Location? location)
+        {
+            foreach (var member in members) {
+                if (member.Modifiers.Any(SyntaxKind.StaticKeyword) != isStatic)
+                    continue;
+                if (member is FieldDeclarationSyntax fieldDecl) {
+                    foreach (var v in fieldDecl.Declaration.Variables) {
+                        if (v.Initializer == null) {
+                            var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
+                            if (field != null && !initializedMembers.Contains(field)) {
+                                var symbolType = typeSystem.GetSymbolType(field);
+                                CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                            }
+                        }
+                    }
+                } else if (member is PropertyDeclarationSyntax { Initializer: null } propertyDecl && propertyDecl.IsAutoProperty()) {
+                    var property = semanticModel.GetDeclaredSymbol(propertyDecl, cancellationToken);
+                    if (property != null && !initializedMembers.Contains(property)) {
+                        var symbolType = typeSystem.GetSymbolType(property);
+                        CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                    }
+                }
+            }
         }
 
         internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)

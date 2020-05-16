@@ -37,6 +37,13 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitConstructorBodyOperation(IConstructorBodyOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitBlock(IBlockOperation operation, EdgeBuildingContext argument)
         {
             int oldVariableCount = localVariables.Count;
@@ -94,9 +101,9 @@ namespace NullabilityInference
         {
             operation.Condition.Accept(this, argument);
             var whenTrue = operation.WhenTrue.Accept(this, argument);
-            var whenFalse = operation.WhenTrue.Accept(this, argument);
+            var whenFalse = operation.WhenFalse?.Accept(this, argument);
             Debug.Assert(whenTrue.Node.NullType == NullType.Oblivious);
-            Debug.Assert(whenFalse.Node.NullType == NullType.Oblivious);
+            Debug.Assert(!whenFalse.HasValue || whenFalse.Value.Node.NullType == NullType.Oblivious);
             return typeSystem.VoidType;
         }
 
@@ -329,6 +336,26 @@ namespace NullabilityInference
                 var edge = syntaxVisitor.CreateAssignmentEdge(source: initType, target: elementType);
                 edge?.SetLabel("ArrayInit", elementInit.Syntax?.GetLocation());
             }
+        }
+
+        public override TypeWithNode VisitPropertyInitializer(IPropertyInitializerOperation operation, EdgeBuildingContext argument)
+        {
+            var property = operation.InitializedProperties.Single();
+            var propertyType = typeSystem.GetSymbolType(property);
+            var value = operation.Value.Accept(this, argument);
+            var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: propertyType);
+            edge?.SetLabel("PropertyInit", operation.Syntax?.GetLocation());
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitFieldInitializer(IFieldInitializerOperation operation, EdgeBuildingContext argument)
+        {
+            var field = operation.InitializedFields.Single();
+            var fieldType = typeSystem.GetSymbolType(field);
+            var value = operation.Value.Accept(this, argument);
+            var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: fieldType);
+            edge?.SetLabel("FieldInit", operation.Syntax?.GetLocation());
+            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitLiteral(ILiteralOperation operation, EdgeBuildingContext argument)

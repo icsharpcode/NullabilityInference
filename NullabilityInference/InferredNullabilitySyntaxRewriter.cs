@@ -37,14 +37,19 @@ namespace NullabilityInference
             }
         }
 
-        public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
+        public override SyntaxNode? VisitGenericName(GenericNameSyntax node)
         {
-            return HandleTypeName(node, base.VisitIdentifierName(node));
+            return HandleTypeName(node, base.VisitGenericName(node));
         }
 
         public override SyntaxNode? VisitPredefinedType(PredefinedTypeSyntax node)
         {
             return HandleTypeName(node, base.VisitPredefinedType(node));
+        }
+
+        public override SyntaxNode? VisitQualifiedName(QualifiedNameSyntax node)
+        {
+            return HandleTypeName(node, base.VisitQualifiedName(node));
         }
 
         private SyntaxNode? HandleTypeName(TypeSyntax node, SyntaxNode? newNode)
@@ -54,6 +59,21 @@ namespace NullabilityInference
             }
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true } && newNode is TypeSyntax newTypeSyntax) {
+                var nullNode = mapping[node];
+                if (nullNode.NullType == NullType.Nullable) {
+                    return SyntaxFactory.NullableType(
+                        elementType: newTypeSyntax.WithoutTrailingTrivia(),
+                        questionToken: SyntaxFactory.Token(SyntaxKind.QuestionToken)
+                    ).WithTrailingTrivia(newTypeSyntax.GetTrailingTrivia());
+                }
+            }
+            return newNode;
+        }
+
+        public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
+        {
+            var newNode = base.VisitArrayType(node);
+            if (GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && newNode is TypeSyntax newTypeSyntax) {
                 var nullNode = mapping[node];
                 if (nullNode.NullType == NullType.Nullable) {
                     return SyntaxFactory.NullableType(

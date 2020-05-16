@@ -45,10 +45,6 @@ namespace NullabilityInference
 
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
         {
-            if (node.IsVar) {
-                // can't use `var?`
-                return base.VisitIdentifierName(node);
-            }
             return HandleTypeName(node, base.VisitIdentifierName(node));
         }
 

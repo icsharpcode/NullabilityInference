@@ -115,7 +115,6 @@ class Program {
         public void StaticFieldAccessOnGenericType()
         {
             AssertNullabilityInference(@"
-using System.Collections.Generic;
 class Generic<T> { public static T Value; }
 class Program {
     public static void Main() {
@@ -128,7 +127,6 @@ class Program {
         public void StaticPropertyAccessOnGenericType()
         {
             AssertNullabilityInference(@"
-using System.Collections.Generic;
 class Generic<T> { public static T Value { get; set; } }
 class Program {
     public static void Main() {
@@ -141,7 +139,6 @@ class Program {
         public void Array()
         {
             AssertNullabilityInference(@"
-using System.Collections.Generic;
 class Program {
     public static string?[] Test() {
         var arr = new string?[1];
@@ -155,7 +152,6 @@ class Program {
         public void ArrayCast()
         {
             AssertNullabilityInference(@"
-using System.Collections.Generic;
 class Program {
     public static string?[] Test(object input) {
         var arr = (string?[])input;
@@ -164,5 +160,112 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void StaticFieldInit()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    static string? uninit;
+    static string init_nonnull = ""a"";
+    static string? init_null = null;
+    static string init_nonnull_cctor;
+    static string? init_null_cctor;
+
+    static Program() {
+        init_nonnull_cctor = ""a"";
+        init_null_cctor = null;
+    }
+
+    Program() {
+        uninit = ""b""; // too late, field will still be marked nullable
+    }
+}");
+        }
+
+        [Fact]
+        public void InstanceFieldInit()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    string? uninit;
+    string init_nonnull = ""a"";
+    string? init_null = null;
+    string init_nonnull_ctor;
+    string? init_null_ctor;
+
+    Program() {
+        init_nonnull_ctor = ""a"";
+        init_null_ctor = null;
+    }
+
+    void Set() {
+        uninit = ""b""; // too late, field will still be marked nullable
+    }
+}");
+        }
+
+        [Fact]
+        public void StaticPropertyInit()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    static string? uninit { get; set; }
+    static string init_nonnull { get; set; } = ""a"";
+    static string? init_null { get; set; } = null;
+    static string init_nonnull_cctor { get; set; }
+    static string? init_null_cctor { get; set; }
+
+    static Program() {
+        init_nonnull_cctor = ""a"";
+        init_null_cctor = null;
+    }
+
+    Program() {
+        uninit = ""b""; // too late, field will still be marked nullable
+    }
+}");
+        }
+
+        [Fact]
+        public void InstancePropertyInit()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    string? uninit { get; set; }
+    string init_nonnull { get; set; } = ""a"";
+    string? init_null { get; set; } = null;
+    string init_nonnull_ctor { get; set; }
+    string? init_null_ctor { get; set; }
+
+    Program() {
+        init_nonnull_ctor = ""a"";
+        init_null_ctor = null;
+    }
+
+    void Set() {
+        uninit = ""b""; // too late, field will still be marked nullable
+    }
+}");
+        }
+
+
+        [Fact]
+        public void NoConstructor()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    static string? uninit_field { get; set; }
+    static string init_field { get; set; } = """";
+    static string? uninit_prop { get; set; }
+    static string init_prop { get; set; } = """";
+
+    string? uninit_instance_field { get; set; }
+    string init_instance_field { get; set; } = """";
+    string? uninit_instance_prop { get; set; }
+    string init_instance_prop { get; set; } = """";
+}");
+        }
+
     }
 }
