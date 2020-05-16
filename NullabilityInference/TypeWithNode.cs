@@ -63,7 +63,14 @@ namespace NullabilityInference
                     newTypeArgs[i] = this.TypeArguments[i].WithSubstitution(newNamedTypeSymbol.TypeArguments[i], subst);
                 }
                 return new TypeWithNode(newType, this.Node, newTypeArgs);
-            } // else if (this.Type is IArrayTypeSymbol thisArrayTypeSymbol && ...)
+            } else if (this.Type is IArrayTypeSymbol thisArrayTypeSymbol && newType is IArrayTypeSymbol newArrayTypeSymbol) {
+                Debug.Assert(thisArrayTypeSymbol.Rank == newArrayTypeSymbol.Rank);
+                var elementType = this.TypeArguments.Single().WithSubstitution(newArrayTypeSymbol.ElementType, subst);
+                return new TypeWithNode(newType, this.Node, new[] { elementType });
+            } else if (this.Type is IPointerTypeSymbol && newType is IPointerTypeSymbol newPointerTypeSymbol) {
+                var pointedAtType = this.TypeArguments.Single().WithSubstitution(newPointerTypeSymbol.PointedAtType, subst);
+                return new TypeWithNode(newType, this.Node, new[] { pointedAtType });
+            }
             return new TypeWithNode(newType, this.Node);
         }
 

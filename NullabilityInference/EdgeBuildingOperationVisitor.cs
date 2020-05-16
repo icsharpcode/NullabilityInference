@@ -231,19 +231,58 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitObjectCreation(IObjectCreationOperation operation, EdgeBuildingContext argument)
         {
-            var oldObjectCreationType = currentObjectCreationType;
-            try {
-                if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
-                    currentObjectCreationType = syntax.Type.Accept(syntaxVisitor);
-                    var substitution = new TypeSubstitution(currentObjectCreationType.TypeArguments, new TypeWithNode[0]);
-                    HandleArguments(substitution, operation.Arguments, context: argument);
+            if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
+                var newObjectType = syntax.Type.Accept(syntaxVisitor);
+                var substitution = new TypeSubstitution(currentObjectCreationType.TypeArguments, new TypeWithNode[0]);
+                HandleArguments(substitution, operation.Arguments, context: argument);
+
+                var oldObjectCreationType = currentObjectCreationType;
+                try {
+                    currentObjectCreationType = newObjectType;
                     operation.Initializer?.Accept(this, argument);
-                    return currentObjectCreationType;
-                } else {
-                    throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
+                } finally {
+                    currentObjectCreationType = oldObjectCreationType;
                 }
-            } finally {
-                currentObjectCreationType = oldObjectCreationType;
+                return newObjectType;
+            } else {
+                throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
+            }
+        }
+
+        public override TypeWithNode VisitArrayCreation(IArrayCreationOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var op in operation.DimensionSizes) {
+                op.Accept(this, argument);
+            }
+
+            if (operation.Syntax is ArrayCreationExpressionSyntax syntax) {
+                var arrayType = syntax.Type.Accept(syntaxVisitor);
+                if (operation.Initializer != null) {
+                    HandleArrayInitializer(operation.Initializer, arrayType, argument);
+                }
+
+                return arrayType;
+            } else {
+                throw new NotImplementedException($"ArrayCreationOperation with syntax={operation.Syntax}");
+            }
+        }
+
+        public override TypeWithNode VisitArrayElementReference(IArrayElementReferenceOperation operation, EdgeBuildingContext argument)
+        {
+            var arrayType = operation.ArrayReference.Accept(this, argument);
+            foreach (var index in operation.Indices) {
+                index.Accept(this, argument);
+            }
+            return arrayType.TypeArguments.Single();
+        }
+
+        private void HandleArrayInitializer(IArrayInitializerOperation operation, TypeWithNode arrayType, EdgeBuildingContext argument)
+        {
+            TypeWithNode elementType = arrayType.TypeArguments.Single();
+            foreach (var elementInit in operation.ElementValues) {
+                var initType = elementInit.Accept(this, argument);
+                var edge = syntaxVisitor.CreateAssignmentEdge(source: initType, target: elementType);
+                edge?.SetLabel("ArrayInit", elementInit.Syntax?.GetLocation());
             }
         }
 

@@ -238,5 +238,30 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void ArrayElement()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1];
+        arr[0] = input;
+        return arr[0];
+    }
+}"));
+        }
+
+        [Fact]
+        public void ArrayElementViaArrayInitializer()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1] { input };
+        return arr[0];
+    }
+}"));
+        }
     }
 }

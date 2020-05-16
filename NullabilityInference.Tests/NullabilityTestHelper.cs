@@ -44,7 +44,7 @@ namespace ICSharpCode.CodeConverter.Tests.NullabilityInference
         {
             public override void Fail(string message, string detailMessage)
             {
-                Assert.Empty(message + " " + detailMessage);
+                throw new InvalidOperationException(message + " " + detailMessage);
             }
         }
 

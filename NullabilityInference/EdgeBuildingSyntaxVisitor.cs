@@ -78,27 +78,34 @@ namespace NullabilityInference
         {
             TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            switch (symbolInfo.Symbol!.Kind) {
-                case SymbolKind.NamedType:
-                    var ty = (INamedTypeSymbol)symbolInfo.Symbol;
+            switch (symbolInfo.Symbol) {
+                case INamedTypeSymbol ty:
                     if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
                         return new TypeWithNode(ty, mapping[node], typeArgs);
                     } else {
                         return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                     }
-                case SymbolKind.TypeParameter:
-                    var tp = (ITypeParameterSymbol)symbolInfo.Symbol;
+                case ITypeParameterSymbol tp:
                     if (tp.HasReferenceTypeConstraint && CanBeMadeNullableSyntax(node)) {
                         return new TypeWithNode(tp, mapping[node], typeArgs);
                     } else {
                         return new TypeWithNode(tp, typeSystem.ObliviousNode, typeArgs);
                     }
-                case SymbolKind.PointerType:
-                case SymbolKind.ArrayType:
-                    throw new NotImplementedException(symbolInfo.Symbol.Kind.ToString());
+                case IPointerTypeSymbol pts:
+                    return new TypeWithNode(pts, typeSystem.ObliviousNode, typeArgs);
+                case IArrayTypeSymbol ats:
+                    return new TypeWithNode(ats, mapping[node], typeArgs);
                 default:
                     return typeSystem.VoidType;
             }
+        }
+
+        public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
+        {
+            var elementType = node.ElementType.Accept(this);
+            var arrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
+            var nullNode = CanBeMadeNullableSyntax(node) ? mapping[node] : typeSystem.ObliviousNode;
+            return new TypeWithNode(arrayType, nullNode, new[] { elementType });
         }
 
         internal TypeWithNode currentMethodReturnType;

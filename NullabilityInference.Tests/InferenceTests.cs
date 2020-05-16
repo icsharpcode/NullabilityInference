@@ -136,5 +136,19 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void Array()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Program {
+    public static string?[] Test() {
+        var arr = new string?[1];
+        arr[0] = null;
+        return arr;
+    }
+}");
+        }
     }
 }

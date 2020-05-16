@@ -83,6 +83,18 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
+        {
+            var elementType = node.ElementType.Accept(this);
+            var arrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
+            // in an ArrayCreationExpression, the rank specifiers may contain arbitrary sub-expressions
+            foreach (var rank in node.RankSpecifiers) {
+                rank.Accept(this);
+            }
+            var nullNode = CanBeMadeNullableSyntax(node) ? Mapping.CreateNewNode(node) : typeSystem.ObliviousNode;
+            return new TypeWithNode(arrayType, nullNode, new[] { elementType });
+        }
+
         public override TypeWithNode VisitVariableDeclaration(VariableDeclarationSyntax node)
         {
             foreach (var v in node.Variables)
