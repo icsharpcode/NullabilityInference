@@ -142,9 +142,10 @@ namespace NullabilityInference
                     var combinedVariance = (variance, tp.Variance) switch
                     {
                         (VarianceKind.None, _) => VarianceKind.None,
-                        (VarianceKind.Out, var x) => x,
-                        (VarianceKind.In, VarianceKind.None) => VarianceKind.None,
+                        (_, VarianceKind.None) => VarianceKind.None,
+                        (VarianceKind.Out, VarianceKind.Out) => VarianceKind.Out,
                         (VarianceKind.In, VarianceKind.Out) => VarianceKind.In,
+                        (VarianceKind.Out, VarianceKind.In) => VarianceKind.In,
                         (VarianceKind.In, VarianceKind.In) => VarianceKind.Out,
                         _ => throw new NotSupportedException("Unknown VarianceKind")
                     };
