@@ -149,6 +149,10 @@ namespace NullabilityInference
         {
             var receiverType = operation.Instance?.Accept(this, argument);
             Dereference(receiverType, operation);
+            if (receiverType == null && operation.Syntax is MemberAccessExpressionSyntax { Expression: var receiverSyntax }) {
+                // Look for a syntactic type as in "SomeClass<T>.StaticField"
+                receiverType = receiverSyntax.Accept(syntaxVisitor);
+            }
             var substitution = new TypeSubstitution(receiverType?.TypeArguments ?? new TypeWithNode[0], new TypeWithNode[0]);
             var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
             fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
@@ -162,7 +166,12 @@ namespace NullabilityInference
         {
             var receiverType = operation.Instance?.Accept(this, argument);
             Dereference(receiverType, operation);
-            var substitution = HandleArguments(ImmutableArray<ITypeSymbol>.Empty, operation.Arguments, receiverType, context: argument);
+            if (receiverType == null && operation.Syntax is MemberAccessExpressionSyntax { Expression: var receiverSyntax }) {
+                // Look for a syntactic type as in "SomeClass<T>.StaticProperty"
+                receiverType = receiverSyntax.Accept(syntaxVisitor);
+            }
+            var substitution = new TypeSubstitution(receiverType?.TypeArguments ?? new TypeWithNode[0], new TypeWithNode[0]);
+            HandleArguments(substitution, operation.Arguments, context: argument);
             var propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
             propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
@@ -175,17 +184,36 @@ namespace NullabilityInference
         {
             var receiverType = operation.Instance?.Accept(this, argument);
             Dereference(receiverType, operation);
-            var subst = HandleArguments(operation.TargetMethod.TypeArguments, operation.Arguments, receiverType, context: argument);
+            if (receiverType == null && operation.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: var receiverSyntax } }) {
+                // Look for a syntactic type as in "SomeClass<T>.StaticMethod();"
+                receiverType = receiverSyntax.Accept(syntaxVisitor);
+            }
+            var classTypeArgNodes = receiverType?.TypeArguments ?? new TypeWithNode[0];
+            TypeWithNode[]? methodTypeArgNodes = null;
+            if (operation.Syntax is InvocationExpressionSyntax ies) {
+                var typeArgSyntax = FindTypeArgumentList(ies.Expression);
+                methodTypeArgNodes = typeArgSyntax?.Arguments.Select(syntaxVisitor.Visit).ToArray();
+            }
+            // If there are no syntactic type arguments, create temporary type nodes instead to represent
+            // the inferred type arguments.
+            methodTypeArgNodes ??= operation.TargetMethod.TypeArguments.Select(syntaxVisitor.CreateTemporaryType).ToArray();
+            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+            HandleArguments(substitution, operation.Arguments, context: argument);
             var returnType = typeSystem.GetSymbolType(operation.TargetMethod.OriginalDefinition);
-            returnType = returnType.WithSubstitution(operation.TargetMethod.ReturnType, subst);
+            returnType = returnType.WithSubstitution(operation.TargetMethod.ReturnType, substitution);
             return returnType;
         }
 
-        private TypeSubstitution HandleArguments(ImmutableArray<ITypeSymbol> methodTypeArguments, ImmutableArray<IArgumentOperation> arguments, TypeWithNode? receiverType, EdgeBuildingContext context)
+        private TypeArgumentListSyntax? FindTypeArgumentList(ExpressionSyntax expr) => expr switch
         {
-            var classTypeArgNodes = receiverType?.TypeArguments ?? new TypeWithNode[0];
-            var methodTypeArgNodes = methodTypeArguments.Select(syntaxVisitor.CreateTemporaryType).ToArray() ?? new TypeWithNode[0];
-            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+            GenericNameSyntax gns => gns.TypeArgumentList,
+            MemberAccessExpressionSyntax maes => FindTypeArgumentList(maes.Name),
+            AliasQualifiedNameSyntax aqns => FindTypeArgumentList(aqns.Name),
+            _ => null,
+        };
+
+        private TypeSubstitution HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext context)
+        {
             foreach (var arg in arguments) {
                 var param = arg.Parameter.OriginalDefinition;
                 var parameterType = typeSystem.GetSymbolType(param);
@@ -207,7 +235,8 @@ namespace NullabilityInference
             try {
                 if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
                     currentObjectCreationType = syntax.Type.Accept(syntaxVisitor);
-                    HandleArguments(operation.Constructor.TypeArguments, operation.Arguments, receiverType: currentObjectCreationType, context: argument);
+                    var substitution = new TypeSubstitution(currentObjectCreationType.TypeArguments, new TypeWithNode[0]);
+                    HandleArguments(substitution, operation.Arguments, context: argument);
                     operation.Initializer?.Accept(this, argument);
                     return currentObjectCreationType;
                 } else {

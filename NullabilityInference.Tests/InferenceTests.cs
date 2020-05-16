@@ -53,8 +53,48 @@ class Program {
     }
 }");
         }
-        
-        /*
+
+        [Fact]
+        public void Call()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public static void Main() {
+        string? a = Identity(null);
+        string? b = Identity(""abc"");
+    }
+    public static string? Identity(string? input) => input;
+}");
+        }
+
+        [Fact]
+        public void GenericCall()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public static void Main() {
+        string? n = null;
+        string? a = Identity(n);
+        string b = Identity(""abc"");
+    }
+    public static T Identity<T>(T input) => input;
+}");
+        }
+
+        [Fact]
+        public void GenericCallExplicitTypeArguments()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public static void Main() {
+        string? n = null;
+        string? a = Identity<string?>(n);
+        string b = Identity<string>(""abc"");
+    }
+    public static T Identity<T>(T input) => input;
+}");
+        }
+
         [Fact]
         public void StaticMethodCallOnGenericType()
         {
@@ -70,6 +110,31 @@ class Program {
     }
 }");
         }
-        */
+
+        [Fact]
+        public void StaticFieldAccessOnGenericType()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Generic<T> { public static T Value; }
+class Program {
+    public static void Main() {
+        Generic<string?>.Value = null;
+    }
+}");
+        }
+
+        [Fact]
+        public void StaticPropertyAccessOnGenericType()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Generic<T> { public static T Value { get; set; } }
+class Program {
+    public static void Main() {
+        Generic<string?>.Value = null;
+    }
+}");
+        }
     }
 }
