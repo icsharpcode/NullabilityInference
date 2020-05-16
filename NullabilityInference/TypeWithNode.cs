@@ -17,6 +17,8 @@ namespace NullabilityInference
     {
         public readonly ITypeSymbol? Type;
         public readonly NullabilityNode Node;
+        // This should be ImmutableArray<TypeWithNode>, but that runs into
+        //   https://github.com/dotnet/runtime/issues/12024
         public readonly IReadOnlyList<TypeWithNode> TypeArguments;
         private static readonly TypeWithNode[] emptyTypeArguments = { };
 
