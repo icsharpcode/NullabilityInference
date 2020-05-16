@@ -152,12 +152,34 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
+        {
+            var returnType = node.Type.Accept(this);
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol != null) {
+                typeSystem.AddSymbolType(symbol, returnType);
+            }
+            foreach (var child in node.ChildNodes()) {
+                if (child != node.Type)
+                    Visit(child);
+            }
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
         {
             var typeNode = node.Type.Accept(this);
             typeNode.SetName("new");
             node.ArgumentList?.Accept(this);
             node.Initializer?.Accept(this);
+            return typeNode;
+        }
+
+        public override TypeWithNode VisitCastExpression(CastExpressionSyntax node)
+        {
+            var typeNode = node.Type.Accept(this);
+            typeNode.SetName("cast");
+            node.Expression.Accept(this);
             return typeNode;
         }
     }

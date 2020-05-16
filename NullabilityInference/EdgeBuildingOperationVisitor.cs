@@ -58,10 +58,11 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitReturn(IReturnOperation operation, EdgeBuildingContext argument)
         {
-            syntaxVisitor.CreateAssignmentEdge(
-                source: operation.ReturnedValue.Accept(this, argument),
-                target: syntaxVisitor.currentMethodReturnType)
-                ?.SetLabel("return", operation.Syntax.GetLocation());
+            var returnVal = operation.ReturnedValue.Accept(this, argument);
+            var edge = syntaxVisitor.CreateAssignmentEdge(
+                source: returnVal,
+                target: syntaxVisitor.currentMethodReturnType);
+            edge?.SetLabel("return", operation.Syntax.GetLocation());
             return typeSystem.VoidType;
         }
 
@@ -81,13 +82,7 @@ namespace NullabilityInference
                 throw new NotImplementedException("Overloaded operator");
             var lhs = operation.LeftOperand.Accept(this, argument);
             var rhs = operation.RightOperand.Accept(this, argument);
-            switch (operation.OperatorKind) {
-                case BinaryOperatorKind.Equals:
-                case BinaryOperatorKind.NotEquals:
-                    return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
-                default:
-                    throw new NotImplementedException(operation.OperatorKind.ToString());
-            }
+            return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
         }
 
         public override TypeWithNode VisitCoalesce(ICoalesceOperation operation, EdgeBuildingContext argument)
@@ -118,7 +113,7 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitParameterReference(IParameterReferenceOperation operation, EdgeBuildingContext argument)
         {
-            var parameterType = typeSystem.GetSymbolType(operation.Parameter);
+            var parameterType = typeSystem.GetSymbolType(operation.Parameter.OriginalDefinition);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 parameterType = parameterType.WithNode(typeSystem.NonNullNode);
             }
@@ -270,6 +265,7 @@ namespace NullabilityInference
         public override TypeWithNode VisitArrayElementReference(IArrayElementReferenceOperation operation, EdgeBuildingContext argument)
         {
             var arrayType = operation.ArrayReference.Accept(this, argument);
+            Dereference(arrayType, operation);
             foreach (var index in operation.Indices) {
                 index.Accept(this, argument);
             }
@@ -306,11 +302,17 @@ namespace NullabilityInference
             if (conv.IsThrow) {
                 return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
             } else if (conv.IsReference) {
-                if (operation.Type is INamedTypeSymbol { Arity: 0 }) {
-                    return new TypeWithNode(operation.Type, input.Node);
+                TypeWithNode targetType;
+                if (conv.IsExplicit && operation.Syntax is CastExpressionSyntax cast) {
+                    targetType = cast.Type.Accept(syntaxVisitor);
                 } else {
-                    throw new NotImplementedException($"Generic conversion: {conv}");
+                    targetType = syntaxVisitor.CreateTemporaryType(operation.Type);
+                    targetType.SetName("ImplicitReferenceConversion");
                 }
+                // TODO: handle type arguments
+                var edge = syntaxVisitor.CreateEdge(source: input.Node, target: targetType.Node);
+                edge?.SetLabel("Cast", operation.Syntax?.GetLocation());
+                return targetType;
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }

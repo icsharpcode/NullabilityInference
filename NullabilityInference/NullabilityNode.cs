@@ -95,6 +95,15 @@ namespace NullabilityInference
         private readonly long id = Interlocked.Increment(ref nextId);
 
         public override Location? Location => null;
-        public override string Name => $"<temp#{id}>";
+        
+        private string symbolName = "temp";
+
+        public override string Name => $"<{symbolName}#{id}>";
+
+        internal override void SetName(string name)
+        {
+            if (symbolName == "temp")
+                symbolName = name;
+        }
     }
 }

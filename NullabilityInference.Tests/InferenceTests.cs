@@ -150,5 +150,19 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void ArrayCast()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Program {
+    public static string?[] Test(object input) {
+        var arr = (string?[])input;
+        arr[0] = null;
+        return arr;
+    }
+}");
+        }
     }
 }

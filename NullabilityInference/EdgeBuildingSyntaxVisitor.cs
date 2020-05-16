@@ -17,8 +17,9 @@ namespace NullabilityInference
     /// This visitor assumes that the NodeBuildingSyntaxVisitor has already run for all syntax trees in the project,
     /// so that the TypeWithNode for any declaration can be looked up in the typeSystem.
     /// This visitor will:
-    ///  * For every `TypeSyntax`, produce the same `TypeWithNode` as `NodeBuildingSyntaxVisitor` did.
+    ///  * For every `TypeSyntax`, retrieve the same `TypeWithNode` as `NodeBuildingSyntaxVisitor` did.
     ///  * For every `ExpressionSyntax`, produce a `TypeWithNode` for the expression's type and nullability.
+    ///    * Note: expressions are not handled directly in this class, but instead by the EdgeBuildingOperationVisitor.
     ///  * Other syntactic nodes return `typeSystem.VoidType`
     /// </summary>
     internal class EdgeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
@@ -126,6 +127,52 @@ namespace NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
+        {
+            var outerMethodReturnType = currentMethodReturnType;
+            try {
+                var symbol = semanticModel.GetDeclaredSymbol(node);
+                if (symbol != null) {
+                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+                } else {
+                    currentMethodReturnType = typeSystem.VoidType;
+                }
+                node.AccessorList?.Accept(this);
+                node.ExpressionBody?.Accept(this);
+                return typeSystem.VoidType;
+            } finally {
+                currentMethodReturnType = outerMethodReturnType;
+            }
+        }
+
+        public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
+        {
+            var outerMethodReturnType = currentMethodReturnType;
+            try {
+                var symbol = semanticModel.GetDeclaredSymbol(node);
+                if (symbol != null) {
+                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+                } else {
+                    currentMethodReturnType = typeSystem.VoidType;
+                }
+                node.AccessorList?.Accept(this);
+                node.ExpressionBody?.Accept(this);
+                return typeSystem.VoidType;
+            } finally {
+                currentMethodReturnType = outerMethodReturnType;
+            }
+        }
+
+        public override TypeWithNode VisitBlock(BlockSyntax node)
+        {
+            return HandleAsOperation(node);
+        }
+
+        public override TypeWithNode VisitArrowExpressionClause(ArrowExpressionClauseSyntax node)
+        {
+            return HandleAsOperation(node);
+        }
+
         internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
         {
             return CreateTypeEdge(source, target, null, VarianceKind.Out);
@@ -138,7 +185,9 @@ namespace NullabilityInference
                 target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
                 targetSubstitution = null;
             }
-            Debug.Assert(SymbolEqualityComparer.Default.Equals(source.Type, target.Type));
+            if (!SymbolEqualityComparer.Default.Equals(source.Type, target.Type)) {
+                throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
+            }
             if (source.Type is INamedTypeSymbol namedType) {
                 Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
                 Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);

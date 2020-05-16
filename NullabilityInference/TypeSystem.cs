@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 
 namespace NullabilityInference
@@ -30,6 +31,17 @@ namespace NullabilityInference
 
         public TypeWithNode GetSymbolType(ISymbol symbol)
         {
+            if (symbol is IParameterSymbol { ContainingSymbol: IMethodSymbol { AssociatedSymbol: IPropertySymbol prop } } p) {
+                // A parameter on an accessor differs from the parameter on the surrounding indexer.
+                if (p.Ordinal >= prop.Parameters.Length) {
+                    Debug.Assert(p.Name == "value");
+                    Debug.Assert(p.Ordinal == prop.Parameters.Length);
+                    // 'value' in property setter has same type as property return type
+                    return GetSymbolType(prop);
+                } else {
+                    symbol = prop.Parameters[p.Ordinal];
+                }
+            }
             if (symbolType.TryGetValue(symbol, out var type)) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule),
                     "Entries in the symbolType dictionary should be from the SourceModule.");

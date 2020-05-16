@@ -133,7 +133,7 @@ class Program {
         }
 
         [Fact]
-        public void UseProperty()
+        public void UseAutoProperty()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
 class Program {
@@ -148,7 +148,7 @@ class Program {
         }
 
         [Fact]
-        public void UsePropertyWithNullCheck()
+        public void UseAutoPropertyWithNullCheck()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
 class Program {
@@ -161,6 +161,40 @@ class Program {
             return ""null"";
         }
         return Property;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UseCustomPropertyGetter()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    static string field;
+
+    static string Property { get { return field; } }
+
+    public static string Test(string input)
+    {
+        field = input;
+        return Property;
+    }
+}"));
+        }
+
+        [Fact]
+        public void UseCustomPropertySetter()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    static string field;
+
+    static string Property { set { field = value; } }
+
+    public static string Test(string input)
+    {
+        Property = input;
+        return field;
     }
 }"));
         }
@@ -261,6 +295,16 @@ class Program {
         var arr = new string[1] { input };
         return arr[0];
     }
+}"));
+        }
+
+        [Fact]
+        public void CallIndexer()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public string Test(string input) => this[input];
+    public string this[string input] => input;
 }"));
         }
     }
