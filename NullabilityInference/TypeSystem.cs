@@ -29,7 +29,12 @@ namespace NullabilityInference
             this.voidType = compilation.GetSpecialType(SpecialType.System_Void);
         }
 
-        public TypeWithNode GetSymbolType(ISymbol symbol)
+
+        /// <summary>
+        /// Adjusts the symbol to use for GetSymbolType() calls.
+        /// This maps parameters from accessors to the corresponding event parameter.
+        /// </summary>
+        internal static ISymbol SymbolAdjustments(ISymbol symbol)
         {
             if (symbol is IParameterSymbol { ContainingSymbol: IMethodSymbol { AssociatedSymbol: IPropertySymbol prop } } p) {
                 // A parameter on an accessor differs from the parameter on the surrounding indexer.
@@ -37,11 +42,17 @@ namespace NullabilityInference
                     Debug.Assert(p.Name == "value");
                     Debug.Assert(p.Ordinal == prop.Parameters.Length);
                     // 'value' in property setter has same type as property return type
-                    return GetSymbolType(prop);
+                    return prop;
                 } else {
-                    symbol = prop.Parameters[p.Ordinal];
+                    return prop.Parameters[p.Ordinal];
                 }
             }
+            return symbol;
+        }
+
+        public TypeWithNode GetSymbolType(ISymbol symbol)
+        {
+            symbol = SymbolAdjustments(symbol);
             if (symbolType.TryGetValue(symbol, out var type)) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule),
                     "Entries in the symbolType dictionary should be from the SourceModule.");
@@ -168,6 +179,8 @@ namespace NullabilityInference
         internal void RegisterEdges(IEnumerable<NullabilityEdge> newEdges)
         {
             foreach (var edge in newEdges) {
+                Debug.Assert(edge.Source.ReplacedWith == edge.Source);
+                Debug.Assert(edge.Target.ReplacedWith == edge.Target);
                 edge.Source.OutgoingEdges.Add(edge);
                 edge.Target.IncomingEdges.Add(edge);
             }

@@ -12,8 +12,8 @@ namespace NullabilityInference
     [DebuggerDisplay("{Source} -> {Target}")]
     internal sealed class NullabilityEdge
     {
-        public NullabilityNode Source { get; private set; }
-        public NullabilityNode Target { get; private set; }
+        public NullabilityNode Source { get; }
+        public NullabilityNode Target { get; }
 
 #if DEBUG
         internal string? Label;

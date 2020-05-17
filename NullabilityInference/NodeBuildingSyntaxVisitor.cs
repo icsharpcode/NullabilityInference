@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -117,6 +118,7 @@ namespace NullabilityInference
                 var type = node.Type.Accept(this);
                 var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
                 if (symbol != null) {
+                    parameterTypes.Add(symbol, type);
                     typeSystem.AddSymbolType(symbol, type);
                 }
             }
@@ -124,46 +126,57 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
+        {
+            return HandleMember(node, null);
+        }
+
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
-            var returnType = node.ReturnType.Accept(this);
-            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
-            if (symbol != null) {
-                typeSystem.AddSymbolType(symbol, returnType);
-            }
-            foreach (var child in node.ChildNodes()) {
-                if (child != node.ReturnType)
-                    Visit(child);
-            }
-            return typeSystem.VoidType;
+            return HandleMember(node, node.ReturnType);
+        }
+
+        public override TypeWithNode VisitOperatorDeclaration(OperatorDeclarationSyntax node)
+        {
+            return HandleMember(node, node.ReturnType);
+        }
+
+        public override TypeWithNode VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node)
+        {
+            return HandleMember(node, node.Type);
         }
 
         public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
         {
-            var returnType = node.Type.Accept(this);
-            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
-            if (symbol != null) {
-                typeSystem.AddSymbolType(symbol, returnType);
-            }
-            foreach (var child in node.ChildNodes()) {
-                if (child != node.Type)
-                    Visit(child);
-            }
-            return typeSystem.VoidType;
+            return HandleMember(node, node.Type);
         }
 
         public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
         {
-            var returnType = node.Type.Accept(this);
-            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
-            if (symbol != null) {
-                typeSystem.AddSymbolType(symbol, returnType);
+            return HandleMember(node, node.Type);
+        }
+
+        private ISymbol? currentMember;
+
+        private TypeWithNode HandleMember(MemberDeclarationSyntax node, TypeSyntax? typeSyntax)
+        {
+            var outerMember = currentMember;
+            try {
+                currentMember = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+                if (typeSyntax != null) {
+                    var returnType = typeSyntax.Accept(this);
+                    if (currentMember != null) {
+                        typeSystem.AddSymbolType(currentMember, returnType);
+                    }
+                }
+                foreach (var child in node.ChildNodes()) {
+                    if (child != typeSyntax)
+                        Visit(child);
+                }
+                return typeSystem.VoidType;
+            } finally {
+                currentMember = outerMember;
             }
-            foreach (var child in node.ChildNodes()) {
-                if (child != node.Type)
-                    Visit(child);
-            }
-            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
@@ -181,6 +194,67 @@ namespace NullabilityInference
             typeNode.SetName("cast");
             node.Expression.Accept(this);
             return typeNode;
+        }
+
+        public override TypeWithNode VisitThrowExpression(ThrowExpressionSyntax node)
+        {
+            HandleThrow(node.Expression);
+            return base.VisitThrowExpression(node);
+        }
+
+        public override TypeWithNode VisitThrowStatement(ThrowStatementSyntax node)
+        {
+            HandleThrow(node.Expression);
+            return base.VisitThrowStatement(node);
+        }
+
+        private readonly Dictionary<IParameterSymbol, TypeWithNode> parameterTypes = new Dictionary<IParameterSymbol, TypeWithNode>();
+
+        private void HandleThrow(ExpressionSyntax? exceptionSyntax)
+        {
+            // Treat `throw ArgumentNullException(paramName)` as a hint that `paramName` is non-nullable.
+            // Without this special case, we will likely end up inferring the parameter as nullable,
+            // since there's a (throwing) code path handling `null`, so flow analysis prevents
+            // us from creating edges for uses of the parameter.
+            if (exceptionSyntax is ObjectCreationExpressionSyntax oce) {
+                if (IsArgumentNullException(oce.Type) && oce.ArgumentList?.Arguments.Count == 1 && IsParameterName(oce.ArgumentList.Arguments.Single(), out var param)) {
+                    var paramType = parameterTypes[param];
+                    paramType.Node.ReplaceWith(typeSystem.NonNullNode);
+                }
+            }
+
+            bool IsArgumentNullException(TypeSyntax type)
+            {
+                var symbolInfo = semanticModel.GetSymbolInfo(type, cancellationToken);
+                return symbolInfo.Symbol is INamedTypeSymbol { Name: "ArgumentNullException" };
+            }
+        }
+
+
+        private bool IsParameterName(ArgumentSyntax? argument, [NotNullWhen(returnValue: true)] out IParameterSymbol? parameter)
+        {
+            parameter = null;
+            if (argument == null)
+                return false;
+            if (argument.Expression is LiteralExpressionSyntax literal && literal.Kind() == SyntaxKind.StringLiteralExpression) {
+                string name = literal.Token.ValueText;
+               if (currentMember is IMethodSymbol method) {
+                    parameter = method.Parameters.SingleOrDefault(p => p.Name == name);
+                } else if (currentMember is IPropertySymbol property) {
+                    parameter = property.Parameters.SingleOrDefault(p => p.Name == name);
+                }
+                return parameter != null;
+            } else if (argument.Expression is InvocationExpressionSyntax
+            {
+                Expression: IdentifierNameSyntax { Identifier: { Text: "nameof" } },
+                ArgumentList: { Arguments: { Count: 1 } nameofArgs }
+            }) {
+                var symbolInfo = semanticModel.GetSymbolInfo(nameofArgs.Single().Expression, cancellationToken);
+                parameter = symbolInfo.Symbol as IParameterSymbol;
+                return parameter != null;
+            } else {
+                return false;
+            }
         }
     }
 }

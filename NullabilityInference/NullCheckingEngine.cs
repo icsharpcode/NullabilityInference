@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -45,12 +46,17 @@ namespace NullabilityInference
             // There's going to be a bunch of remaining nodes where either choice would work.
             // For parameters, prefer marking those as nullable:
             foreach (var paramNode in typeSystem.ParameterNodes) {
-                InferNullable(paramNode);
+                InferNullable(paramNode.ReplacedWith);
             }
             foreach (var node in typeSystem.AllNodes) {
                 // Finally, anything left over is inferred to be non-null:
-                if (node.NullType == NullType.Infer)
-                    node.NullType = NullType.NonNull;
+                if (node.NullType == NullType.Infer) {
+                    if (node.ReplacedWith.NullType != NullType.Infer)
+                        node.NullType = node.ReplacedWith.NullType;
+                    else
+                        node.NullType = NullType.NonNull;
+                }
+                Debug.Assert(node.NullType == node.ReplacedWith.NullType);
             }
         }
 
@@ -118,7 +124,7 @@ namespace NullabilityInference
 
         public GraphVizGraph ExportTypeGraph()
         {
-            return ExportTypeGraph(n => n.NullType != NullType.Oblivious);
+            return ExportTypeGraph(n => n.NullType != NullType.Oblivious && n.ReplacedWith == n);
         }
 
         public GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter)

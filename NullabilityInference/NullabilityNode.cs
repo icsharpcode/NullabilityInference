@@ -44,6 +44,39 @@ namespace NullabilityInference
         internal virtual void SetName(string name)
         {
         }
+
+        private NullabilityNode? replacement;
+
+        public NullabilityNode ReplacedWith {
+            get {
+                NullabilityNode result = this;
+                while (result.replacement != null)
+                    result = result.replacement;
+                return result;
+            }
+        }
+
+        /// <summary>
+        /// Replace with node with another node.
+        /// All future attempts to create an edge involving this node, will instead create an edge with the other node.
+        /// This method can only be used in the NodeBuilding phase, as otherwise there might already be edges registered;
+        /// which will not be re-pointed.
+        /// </summary>
+        internal void ReplaceWith(NullabilityNode other)
+        {
+            if (this.replacement != null) {
+                this.replacement.ReplaceWith(other);
+                return;
+            }
+            while (other.replacement != null) {
+                other = other.replacement;
+            }
+            Debug.Assert(this.NullType == other.NullType || this.NullType == NullType.Infer || other.NullType == NullType.Infer);
+            // Replacements must be performed before the edges are registered.
+            Debug.Assert(this.IncomingEdges.Count == 0);
+            Debug.Assert(this.OutgoingEdges.Count == 0);
+            this.replacement = other;
+        }
     }
 
     [DebuggerDisplay("{Name}")]

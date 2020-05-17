@@ -273,8 +273,12 @@ namespace NullabilityInference
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
                 VarianceKind variance = param.RefKind switch {
-                    RefKind.None => VarianceKind.Out,
-                    _ => VarianceKind.None
+                    // The direction of the edge depends on the refkind:
+                    RefKind.None => VarianceKind.Out, // argument --> parameter
+                    RefKind.In => VarianceKind.Out,   // argument --> parameter
+                    RefKind.Ref => VarianceKind.None, // argument <-> parameter
+                    RefKind.Out => VarianceKind.In,   // argument <-- parameter
+                    _ => throw new NotSupportedException($"RefKind unsupported: {param.RefKind}")
                 };
                 var edge = syntaxVisitor.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance);
                 edge?.SetLabel("Argument", arg.Syntax?.GetLocation());

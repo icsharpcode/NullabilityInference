@@ -337,6 +337,8 @@ namespace NullabilityInference
         internal NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
         {
             // Ignore a bunch of special cases where the edge won't have any effect on the overall result:
+            source = source.ReplacedWith;
+            target = target.ReplacedWith;
             if (source == target) {
                 return null;
             }
