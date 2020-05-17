@@ -9,6 +9,7 @@ using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace NullabilityInference
 {
@@ -96,6 +97,13 @@ namespace NullabilityInference
             return new TypeWithNode(arrayType, nullNode, new[] { elementType });
         }
 
+        public override TypeWithNode VisitTupleType(TupleTypeSyntax node)
+        {
+            var elementTypes = node.Elements.Select(e => e.Type.Accept(this)).ToArray();
+            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+            return new TypeWithNode(symbolInfo.Symbol as ITypeSymbol, typeSystem.ObliviousNode, elementTypes);
+        }
+
         public override TypeWithNode VisitVariableDeclaration(VariableDeclarationSyntax node)
         {
             foreach (var v in node.Variables)
@@ -110,6 +118,36 @@ namespace NullabilityInference
                 }
             }
             return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitDeclarationExpression(DeclarationExpressionSyntax node)
+        {
+            if (node.Type is SimpleNameSyntax { IsVar: true }) {
+                node.Designation.Accept(this);
+            } else {
+                var type = node.Type.Accept(this);
+                if (node.Designation is SingleVariableDesignationSyntax svds) {
+                    var symbol = semanticModel.GetDeclaredSymbol(svds, cancellationToken);
+                    if (symbol != null) {
+                        typeSystem.AddSymbolType(symbol, type);
+                    }
+                } else {
+                    throw new NotImplementedException($"DeclarationExpression with explicit type unsupported designation: {node.Designation}");
+                }
+            }
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitSingleVariableDesignation(SingleVariableDesignationSyntax node)
+        {
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol is ILocalSymbol local) {
+                var type = typeSystem.CreateTemporaryType(local.Type);
+                typeSystem.AddSymbolType(symbol, type);
+                return type;
+            } else {
+                throw new NotSupportedException("SingleVariableDesignationSyntax should declare a LocalSymbol");
+            }
         }
 
         public override TypeWithNode VisitParameter(ParameterSyntax node)

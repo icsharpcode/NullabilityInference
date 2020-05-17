@@ -337,5 +337,18 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void Tuple()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string? input) {
+        var tuple = (input, 1);
+        (string a, _) = tuple;
+        return a;
+    }
+}"));
+        }
     }
 }

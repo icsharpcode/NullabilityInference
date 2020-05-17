@@ -2,8 +2,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Text;
-using System.Threading;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -15,7 +14,6 @@ namespace NullabilityInference
     /// </summary>
     internal abstract class GraphBuildingSyntaxVisitor : CSharpSyntaxVisitor<TypeWithNode>
     {
-
         public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
         {
             return HandleTypeName(node, null);

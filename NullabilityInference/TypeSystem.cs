@@ -190,6 +190,8 @@ namespace NullabilityInference
             }
 
             private readonly List<Action<TypeSystem>> cachedActions = new List<Action<TypeSystem>>();
+            private readonly List<TemporaryNullabilityNode> newNodes = new List<TemporaryNullabilityNode>();
+            private readonly List<NullabilityEdge> newEdges = new List<NullabilityEdge>();
 
             private void AddAction(Action<TypeSystem> action)
             {
@@ -202,20 +204,103 @@ namespace NullabilityInference
                     action(typeSystem);
                 }
                 cachedActions.Clear();
-            }
-        }
+                
+                typeSystem.additionalNodes.AddRange(newNodes);
+                newNodes.Clear();
 
-        internal void RegisterNodes(IEnumerable<NullabilityNode> newNodes)
-        {
-            additionalNodes.AddRange(newNodes);
-        }
-        internal void RegisterEdges(IEnumerable<NullabilityEdge> newEdges)
-        {
-            foreach (var edge in newEdges) {
-                Debug.Assert(edge.Source.ReplacedWith == edge.Source);
-                Debug.Assert(edge.Target.ReplacedWith == edge.Target);
-                edge.Source.OutgoingEdges.Add(edge);
-                edge.Target.IncomingEdges.Add(edge);
+                foreach (var edge in newEdges) {
+                    Debug.Assert(edge.Source.ReplacedWith == edge.Source);
+                    Debug.Assert(edge.Target.ReplacedWith == edge.Target);
+                    edge.Source.OutgoingEdges.Add(edge);
+                    edge.Target.IncomingEdges.Add(edge);
+                }
+                newEdges.Clear();
+            }
+
+            /// <summary>
+            /// Create temporary type nodes for the specified type.
+            /// </summary>
+            public TypeWithNode CreateTemporaryType(ITypeSymbol type)
+            {
+                if (type is INamedTypeSymbol nts) {
+                    var typeArgs = nts.TypeArguments.Select(CreateTemporaryType).ToArray();
+                    if (nts.IsReferenceType) {
+                        return new TypeWithNode(nts, CreateTemporaryNode(), typeArgs);
+                    } else {
+                        return new TypeWithNode(nts, ObliviousNode, typeArgs);
+                    }
+                } else if (type is IArrayTypeSymbol ats) {
+                    return new TypeWithNode(ats, CreateTemporaryNode(), new[] { CreateTemporaryType(ats.ElementType) });
+                } else if (type is IPointerTypeSymbol pts) {
+                    return new TypeWithNode(pts, CreateTemporaryNode(), new[] { CreateTemporaryType(pts.PointedAtType) });
+                }
+                return new TypeWithNode(type, ObliviousNode);
+            }
+
+            public NullabilityNode CreateTemporaryNode()
+            {
+                var node = new TemporaryNullabilityNode();
+                newNodes.Add(node);
+                return node;
+            }
+
+            internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
+            {
+                return CreateTypeEdge(source, target, null, VarianceKind.Out);
+            }
+
+            internal NullabilityEdge? CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance)
+            {
+                if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
+                    // Perform the substitution:
+                    target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
+                    targetSubstitution = null;
+                }
+                if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
+                    throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
+                }
+                if (source.Type is INamedTypeSymbol namedType) {
+                    Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
+                    Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);
+                    for (int i = 0; i < namedType.TypeParameters.Length; i++) {
+                        tp = namedType.TypeParameters[i];
+                        var sourceArg = source.TypeArguments[i];
+                        var targetArg = target.TypeArguments[i];
+                        var combinedVariance = (variance, tp.Variance).Combine();
+                        CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
+                    }
+                } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {
+                    CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance);
+                }
+                if (variance == VarianceKind.In || variance == VarianceKind.None)
+                    CreateEdge(target.Node, source.Node);
+                if (variance == VarianceKind.Out || variance == VarianceKind.None)
+                    return CreateEdge(source.Node, target.Node);
+                else
+                    return null;
+            }
+
+            /// <summary>
+            /// Creates an edge source->target.
+            /// </summary>
+            public NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
+            {
+                // Ignore a bunch of special cases where the edge won't have any effect on the overall result:
+                source = source.ReplacedWith;
+                target = target.ReplacedWith;
+                if (source == target) {
+                    return null;
+                }
+                if (source.NullType == NullType.NonNull || source.NullType == NullType.Oblivious) {
+                    return null;
+                }
+                if (target.NullType == NullType.Nullable || target.NullType == NullType.Oblivious) {
+                    return null;
+                }
+                var edge = new NullabilityEdge(source, target);
+                Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
+                newEdges.Add(edge);
+                return edge;
             }
         }
     }

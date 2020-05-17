@@ -114,11 +114,11 @@ namespace NullabilityInference
         private void CreateEdges(SyntaxTree syntaxTree, CancellationToken cancellationToken)
         {
             var semanticModel = compilation.GetSemanticModel(syntaxTree);
-            var visitor = new EdgeBuildingSyntaxVisitor(semanticModel, typeSystem, typeSystem.GetMapping(syntaxTree), cancellationToken);
+            var tsBuilder = new TypeSystem.Builder(typeSystem);
+            var visitor = new EdgeBuildingSyntaxVisitor(semanticModel, typeSystem, tsBuilder, typeSystem.GetMapping(syntaxTree), cancellationToken);
             visitor.Visit(syntaxTree.GetRoot(cancellationToken));
             lock (typeSystem) {
-                typeSystem.RegisterNodes(visitor.NewNodes);
-                typeSystem.RegisterEdges(visitor.NewEdges);
+                tsBuilder.Flush(typeSystem);
             }
         }
 

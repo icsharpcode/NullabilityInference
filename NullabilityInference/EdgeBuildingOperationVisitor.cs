@@ -18,11 +18,13 @@ namespace NullabilityInference
     {
         private readonly EdgeBuildingSyntaxVisitor syntaxVisitor;
         private readonly TypeSystem typeSystem;
+        private readonly TypeSystem.Builder tsBuilder;
 
-        internal EdgeBuildingOperationVisitor(EdgeBuildingSyntaxVisitor syntaxVisitor, TypeSystem typeSystem)
+        internal EdgeBuildingOperationVisitor(EdgeBuildingSyntaxVisitor syntaxVisitor, TypeSystem typeSystem, TypeSystem.Builder tsBuilder)
         {
             this.syntaxVisitor = syntaxVisitor;
             this.typeSystem = typeSystem;
+            this.tsBuilder = tsBuilder;
         }
 
         public override TypeWithNode DefaultVisit(IOperation operation, EdgeBuildingContext argument)
@@ -94,7 +96,7 @@ namespace NullabilityInference
         {
             if (operation.ReturnedValue != null) {
                 var returnVal = operation.ReturnedValue.Accept(this, argument);
-                var edge = syntaxVisitor.CreateAssignmentEdge(
+                var edge = tsBuilder.CreateAssignmentEdge(
                     source: returnVal,
                     target: syntaxVisitor.currentMethodReturnType);
                 edge?.SetLabel("return", operation.Syntax.GetLocation());
@@ -169,7 +171,7 @@ namespace NullabilityInference
                 foreach (var attr in argument.Parameter.GetAttributes()) {
                     if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
                         if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
-                            syntaxVisitor.CreateEdge(testedNode.Node, typeSystem.NonNullNode)?.SetLabel("Assert", operation.Syntax?.GetLocation());
+                            tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode)?.SetLabel("Assert", operation.Syntax?.GetLocation());
                             break;
                         }
                     }
@@ -236,7 +238,7 @@ namespace NullabilityInference
         private void Dereference(TypeWithNode? type, IOperation dereferencingOperation)
         {
             if (type != null) {
-                var edge = syntaxVisitor.CreateEdge(type.Value.Node, typeSystem.NonNullNode);
+                var edge = tsBuilder.CreateEdge(type.Value.Node, typeSystem.NonNullNode);
                 edge?.SetLabel("Deref", dereferencingOperation.Syntax.GetLocation());
             }
         }
@@ -292,7 +294,7 @@ namespace NullabilityInference
             }
             // If there are no syntactic type arguments, create temporary type nodes instead to represent
             // the inferred type arguments.
-            methodTypeArgNodes ??= operation.TargetMethod.TypeArguments.Select(syntaxVisitor.CreateTemporaryType).ToArray();
+            methodTypeArgNodes ??= operation.TargetMethod.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
             HandleArguments(substitution, operation.Arguments, context: argument);
             var returnType = typeSystem.GetSymbolType(operation.TargetMethod.OriginalDefinition);
@@ -326,7 +328,7 @@ namespace NullabilityInference
                     RefKind.Out => VarianceKind.In,   // argument <-- parameter
                     _ => throw new NotSupportedException($"RefKind unsupported: {param.RefKind}")
                 };
-                var edge = syntaxVisitor.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance);
+                var edge = tsBuilder.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance);
                 edge?.SetLabel("Argument", arg.Syntax?.GetLocation());
             }
             return substitution;
@@ -387,7 +389,7 @@ namespace NullabilityInference
             TypeWithNode elementType = arrayType.TypeArguments.Single();
             foreach (var elementInit in operation.ElementValues) {
                 var initType = elementInit.Accept(this, argument);
-                var edge = syntaxVisitor.CreateAssignmentEdge(source: initType, target: elementType);
+                var edge = tsBuilder.CreateAssignmentEdge(source: initType, target: elementType);
                 edge?.SetLabel("ArrayInit", elementInit.Syntax?.GetLocation());
             }
         }
@@ -397,7 +399,7 @@ namespace NullabilityInference
             var property = operation.InitializedProperties.Single();
             var propertyType = typeSystem.GetSymbolType(property);
             var value = operation.Value.Accept(this, argument);
-            var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: propertyType);
+            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: propertyType);
             edge?.SetLabel("PropertyInit", operation.Syntax?.GetLocation());
             return typeSystem.VoidType;
         }
@@ -407,7 +409,7 @@ namespace NullabilityInference
             var field = operation.InitializedFields.Single();
             var fieldType = typeSystem.GetSymbolType(field);
             var value = operation.Value.Accept(this, argument);
-            var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: fieldType);
+            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: fieldType);
             edge?.SetLabel("FieldInit", operation.Syntax?.GetLocation());
             return typeSystem.VoidType;
         }
@@ -441,11 +443,11 @@ namespace NullabilityInference
                 if (conv.IsExplicit && operation.Syntax is CastExpressionSyntax cast) {
                     targetType = cast.Type.Accept(syntaxVisitor);
                 } else {
-                    targetType = syntaxVisitor.CreateTemporaryType(operation.Type);
+                    targetType = tsBuilder.CreateTemporaryType(operation.Type);
                     targetType.SetName("ImplicitReferenceConversion");
                 }
                 // TODO: handle type arguments
-                var edge = syntaxVisitor.CreateEdge(source: input.Node, target: targetType.Node);
+                var edge = tsBuilder.CreateEdge(source: input.Node, target: targetType.Node);
                 edge?.SetLabel("Cast", operation.Syntax?.GetLocation());
                 return targetType;
             } else {
@@ -477,7 +479,7 @@ namespace NullabilityInference
         {
             var target = operation.Target.Accept(this, argument);
             var value = operation.Value.Accept(this, argument);
-            var edge = syntaxVisitor.CreateAssignmentEdge(source: value, target: target);
+            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: target);
             edge?.SetLabel("Assign", operation.Syntax?.GetLocation());
             return target;
         }
@@ -517,7 +519,7 @@ namespace NullabilityInference
             var variableType = typeSystem.GetSymbolType(operation.Symbol);
             if (operation.Initializer != null) {
                 var init = operation.Initializer.Accept(this, argument);
-                var edge = syntaxVisitor.CreateAssignmentEdge(source: init, target: variableType);
+                var edge = tsBuilder.CreateAssignmentEdge(source: init, target: variableType);
                 edge?.SetLabel("VarInit", operation.Syntax?.GetLocation());
             }
             return typeSystem.VoidType;
@@ -534,6 +536,39 @@ namespace NullabilityInference
                 child.Accept(this, argument);
             }
             return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitTuple(ITupleOperation operation, EdgeBuildingContext argument)
+        {
+            var elementTypes = operation.Elements.Select(e => e.Accept(this, argument)).ToArray();
+            return new TypeWithNode(operation.Type, typeSystem.ObliviousNode, elementTypes);
+        }
+
+        public override TypeWithNode VisitDeconstructionAssignment(IDeconstructionAssignmentOperation operation, EdgeBuildingContext argument)
+        {
+            var lhs = operation.Target.Accept(this, argument);
+            var rhs = operation.Value.Accept(this, argument);
+            if (lhs.Type?.IsTupleType == true) {
+                Debug.Assert(lhs.TypeArguments.Count == rhs.TypeArguments.Count);
+                foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhs.TypeArguments)) {
+                    tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement);
+                }
+                return rhs;
+            } else {
+                throw new NotImplementedException("DeconstructionAssignment for non-tuple");
+            }
+        }
+
+        public override TypeWithNode VisitDeclarationExpression(IDeclarationExpressionOperation operation, EdgeBuildingContext argument)
+        {
+            // appears e.g. in `var (a, b) = tuple;`
+            return operation.Expression.Accept(this, argument);
+        }
+
+        public override TypeWithNode VisitDiscardOperation(IDiscardOperation operation, EdgeBuildingContext argument)
+        {
+            // appears e.g. in `_ = string.Empty;`
+            return typeSystem.GetObliviousType(operation.Type);
         }
     }
 }

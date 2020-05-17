@@ -27,20 +27,19 @@ namespace NullabilityInference
     {
         private readonly SemanticModel semanticModel;
         private readonly TypeSystem typeSystem;
+        private readonly TypeSystem.Builder typeSystemBuilder;
         private readonly CancellationToken cancellationToken;
         private readonly SyntaxToNodeMapping mapping;
         private readonly EdgeBuildingOperationVisitor operationVisitor;
 
-        internal readonly List<NullabilityNode> NewNodes = new List<NullabilityNode>();
-        internal readonly List<NullabilityEdge> NewEdges = new List<NullabilityEdge>();
-
-        public EdgeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem typeSystem, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
+        public EdgeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem typeSystem, TypeSystem.Builder typeSystemBuilder, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
         {
             this.semanticModel = semanticModel;
             this.typeSystem = typeSystem;
+            this.typeSystemBuilder = typeSystemBuilder;
             this.cancellationToken = cancellationToken;
             this.mapping = mapping;
-            this.operationVisitor = new EdgeBuildingOperationVisitor(this, typeSystem);
+            this.operationVisitor = new EdgeBuildingOperationVisitor(this, typeSystem, typeSystemBuilder);
         }
 
         public override TypeWithNode DefaultVisit(SyntaxNode node)
@@ -85,7 +84,7 @@ namespace NullabilityInference
                     Debug.Assert(ty.TypeParameters.Length == typeArgs.Length);
                     foreach (var (tp, ta) in ty.TypeParameters.Zip(typeArgs)) {
                         if (tp.HasNotNullConstraint) {
-                            var edge = CreateEdge(ta.Node, typeSystem.NonNullNode);
+                            var edge = typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode);
                             edge?.SetLabel("nonnull constraint", node.GetLocation());
                         }
                     }
@@ -127,6 +126,13 @@ namespace NullabilityInference
             var arrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
             var nullNode = CanBeMadeNullableSyntax(node) ? mapping[node] : typeSystem.ObliviousNode;
             return new TypeWithNode(arrayType, nullNode, new[] { elementType });
+        }
+
+        public override TypeWithNode VisitTupleType(TupleTypeSyntax node)
+        {
+            var elementTypes = node.Elements.Select(e => e.Type.Accept(this)).ToArray();
+            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+            return new TypeWithNode(symbolInfo.Symbol as ITypeSymbol, typeSystem.ObliviousNode, elementTypes);
         }
 
         internal TypeWithNode currentMethodReturnType;
@@ -264,7 +270,7 @@ namespace NullabilityInference
                             var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
                             if (field != null && !initializedMembers.Contains(field)) {
                                 var symbolType = typeSystem.GetSymbolType(field);
-                                CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                                typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
                             }
                         }
                     }
@@ -272,96 +278,10 @@ namespace NullabilityInference
                     var property = semanticModel.GetDeclaredSymbol(propertyDecl, cancellationToken);
                     if (property != null && !initializedMembers.Contains(property)) {
                         var symbolType = typeSystem.GetSymbolType(property);
-                        CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                        typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
                     }
                 }
             }
-        }
-
-        internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
-        {
-            return CreateTypeEdge(source, target, null, VarianceKind.Out);
-        }
-
-        internal NullabilityEdge? CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance)
-        {
-            if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
-                // Perform the substitution:
-                target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
-                targetSubstitution = null;
-            }
-            if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
-                throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
-            }
-            if (source.Type is INamedTypeSymbol namedType) {
-                Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
-                Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);
-                for (int i = 0; i < namedType.TypeParameters.Length; i++) {
-                    tp = namedType.TypeParameters[i];
-                    var sourceArg = source.TypeArguments[i];
-                    var targetArg = target.TypeArguments[i];
-                    var combinedVariance = (variance, tp.Variance).Combine();
-                    CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
-                }
-            } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {
-                CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance);
-            }
-            if (variance == VarianceKind.In || variance == VarianceKind.None)
-                CreateEdge(target.Node, source.Node);
-            if (variance == VarianceKind.Out || variance == VarianceKind.None)
-                return CreateEdge(source.Node, target.Node);
-            else
-                return null;
-        }
-
-        /// <summary>
-        /// Create temporary type nodes for the specified type.
-        /// </summary>
-        internal TypeWithNode CreateTemporaryType(ITypeSymbol type)
-        {
-            if (type is INamedTypeSymbol nts) {
-                var typeArgs = nts.TypeArguments.Select(CreateTemporaryType).ToArray();
-                if (nts.IsReferenceType) {
-                    return new TypeWithNode(nts, CreateTemporaryNode(), typeArgs);
-                } else {
-                    return new TypeWithNode(nts, typeSystem.ObliviousNode, typeArgs);
-                }
-            } else if (type is IArrayTypeSymbol ats) {
-                return new TypeWithNode(ats, CreateTemporaryNode(), new[] { CreateTemporaryType(ats.ElementType) });
-            } else if (type is IPointerTypeSymbol pts) {
-                return new TypeWithNode(pts, CreateTemporaryNode(), new[] { CreateTemporaryType(pts.PointedAtType) });
-            }
-            return new TypeWithNode(type, typeSystem.ObliviousNode);
-        }
-
-        internal NullabilityNode CreateTemporaryNode()
-        {
-            var node = new TemporaryNullabilityNode();
-            NewNodes.Add(node);
-            return node;
-        }
-
-        /// <summary>
-        /// Creates an edge source->target.
-        /// </summary>
-        internal NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
-        {
-            // Ignore a bunch of special cases where the edge won't have any effect on the overall result:
-            source = source.ReplacedWith;
-            target = target.ReplacedWith;
-            if (source == target) {
-                return null;
-            }
-            if (source.NullType == NullType.NonNull || source.NullType == NullType.Oblivious) {
-                return null;
-            }
-            if (target.NullType == NullType.Nullable || target.NullType == NullType.Oblivious) {
-                return null;
-            }
-            var edge = new NullabilityEdge(source, target);
-            Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
-            NewEdges.Add(edge);
-            return edge;
         }
     }
 }
