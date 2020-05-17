@@ -83,12 +83,32 @@ namespace NullabilityInference
 
         internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability)
         {
-            return new TypeWithNode(type ?? voidType, nullability switch
+            var topLevelNode = nullability switch
             {
                 NullableAnnotation.Annotated => NullableNode,
                 NullableAnnotation.NotAnnotated => NonNullNode,
                 _ => ObliviousNode,
-            });
+            };
+            if (type is INamedTypeSymbol nts) {
+                return new TypeWithNode(nts, topLevelNode, nts.TypeArguments.Zip(nts.TypeArgumentNullableAnnotations, FromType).ToArray());
+            } else if (type is IArrayTypeSymbol ats) {
+                return new TypeWithNode(ats, topLevelNode, new[] { FromType(ats.ElementType, ats.ElementNullableAnnotation) });
+            } else if (type is IPointerTypeSymbol pts) {
+                // The pointed-at-type must be a value type, but that value type might have its own type arguments
+                return new TypeWithNode(pts, topLevelNode, new[] { FromType(pts.PointedAtType, NullableAnnotation.None) });
+            }
+            return new TypeWithNode(type, topLevelNode);
+        }
+        internal TypeWithNode GetObliviousType(ITypeSymbol type)
+        {
+            if (type is INamedTypeSymbol nts) {
+                return new TypeWithNode(nts, ObliviousNode, nts.TypeArguments.Select(this.GetObliviousType).ToArray());
+            } else if (type is IArrayTypeSymbol ats) {
+                return new TypeWithNode(ats, ObliviousNode, new[] { GetObliviousType(ats.ElementType) });
+            } else if (type is IPointerTypeSymbol pts) {
+                return new TypeWithNode(pts, ObliviousNode, new[] { GetObliviousType(pts.PointedAtType) });
+            }
+            return new TypeWithNode(type, ObliviousNode);
         }
 
         public IEnumerable<NullabilityNode> AllNodes {
@@ -107,11 +127,24 @@ namespace NullabilityInference
             }
         }
 
-        internal IEnumerable<NullabilityNode> ParameterNodes {
+        /// <summary>
+        /// Gets nullability nodes for parameters.
+        /// </summary>
+        internal IEnumerable<NullabilityNode> NodesInInputPositions {
             get {
                 foreach (var (sym, type) in symbolType) {
                     if (sym.Kind == SymbolKind.Parameter) {
-                        yield return type.Node;
+                        foreach (var (node, variance) in type.NodesWithVariance()) {
+                            if (variance == VarianceKind.Out) {
+                                yield return node;
+                            }
+                        }
+                    } else if (sym.Kind == SymbolKind.Method) {
+                        foreach (var (node, variance) in type.NodesWithVariance()) {
+                            if (variance == VarianceKind.In) {
+                                yield return node;
+                            }
+                        }
                     }
                 }
             }
@@ -184,18 +217,6 @@ namespace NullabilityInference
                 edge.Source.OutgoingEdges.Add(edge);
                 edge.Target.IncomingEdges.Add(edge);
             }
-        }
-
-        internal TypeWithNode GetObliviousType(ITypeSymbol type)
-        {
-            if (type is INamedTypeSymbol nts) {
-                return new TypeWithNode(nts, ObliviousNode, nts.TypeArguments.Select(this.GetObliviousType).ToArray());
-            } else if (type is IArrayTypeSymbol ats) {
-                return new TypeWithNode(ats, ObliviousNode, new[] { GetObliviousType(ats.ElementType) });
-            } else if (type is IPointerTypeSymbol pts) {
-                return new TypeWithNode(pts, ObliviousNode, new[] { GetObliviousType(pts.PointedAtType) });
-            }
-            return new TypeWithNode(type, ObliviousNode);
         }
     }
 }

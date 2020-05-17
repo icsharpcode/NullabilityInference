@@ -79,6 +79,11 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitEmpty(IEmptyOperation operation, EdgeBuildingContext argument)
+        {
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitExpressionStatement(IExpressionStatementOperation operation, EdgeBuildingContext argument)
         {
             operation.Operation.Accept(this, argument);
@@ -129,7 +134,47 @@ namespace NullabilityInference
                 throw new NotImplementedException("Overloaded operator");
             var lhs = operation.LeftOperand.Accept(this, argument);
             var rhs = operation.RightOperand.Accept(this, argument);
+            if (operation.OperatorKind == BinaryOperatorKind.NotEquals || operation.OperatorKind == BinaryOperatorKind.Equals) {
+                // check for 'Debug.Assert(x != null);'
+                if (IsNullLiteral(operation.RightOperand)) {
+                    HandleNullAssert(operation, lhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
+                } else if (IsNullLiteral(operation.LeftOperand)) {
+                    HandleNullAssert(operation, rhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
+                }
+            }
             return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        private bool IsNullLiteral(IOperation operation)
+        {
+            return operation.ConstantValue is { HasValue: true, Value: null };
+        }
+
+        private void HandleNullAssert(IOperation operation, TypeWithNode testedNode, bool valueOnNull)
+        {
+            // in 'Debug.Assert(x != null)', operation is `x != null`, testedNode is the type of x and valueOnNull is false.
+            while (true) {
+                if (!valueOnNull && operation.Parent is IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalAnd, OperatorMethod: null } binaryAnd) {
+                    operation = binaryAnd;
+                } else if (valueOnNull && operation.Parent is IBinaryOperation { OperatorKind: BinaryOperatorKind.ConditionalOr, OperatorMethod: null } binaryOr) {
+                    operation = binaryOr;
+                } else if (operation.Parent is IUnaryOperation { OperatorKind: UnaryOperatorKind.Not, OperatorMethod: null } unaryNot) {
+                    operation = unaryNot;
+                    valueOnNull = !valueOnNull;
+                } else {
+                    break;
+                }
+            }
+            if (operation.Parent is IArgumentOperation argument) {
+                foreach (var attr in argument.Parameter.GetAttributes()) {
+                    if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
+                        if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
+                            syntaxVisitor.CreateEdge(testedNode.Node, typeSystem.NonNullNode)?.SetLabel("Assert", operation.Syntax?.GetLocation());
+                            break;
+                        }
+                    }
+                }
+            }
         }
 
         public override TypeWithNode VisitCompoundAssignment(ICompoundAssignmentOperation operation, EdgeBuildingContext argument)
@@ -272,7 +317,8 @@ namespace NullabilityInference
                 // Create an assignment edge from argument to parameter.
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
-                VarianceKind variance = param.RefKind switch {
+                VarianceKind variance = param.RefKind switch
+                {
                     // The direction of the edge depends on the refkind:
                     RefKind.None => VarianceKind.Out, // argument --> parameter
                     RefKind.In => VarianceKind.Out,   // argument --> parameter

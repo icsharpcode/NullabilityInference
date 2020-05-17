@@ -45,7 +45,7 @@ namespace NullabilityInference
 
             // There's going to be a bunch of remaining nodes where either choice would work.
             // For parameters, prefer marking those as nullable:
-            foreach (var paramNode in typeSystem.ParameterNodes) {
+            foreach (var paramNode in typeSystem.NodesInInputPositions) {
                 InferNullable(paramNode.ReplacedWith);
             }
             foreach (var node in typeSystem.AllNodes) {

@@ -288,5 +288,34 @@ public sealed class CallbackOnDispose : IDisposable
 	}
 }");
         }
+
+        [Fact]
+        public void UnusedParameters()
+        {
+            // None of the parameters are dereferenced or stored anywhere.
+            // We want a completely unused parameter (a) to default to nullable,
+            // but throwing an ArgumentNullException or using a Debug.Assert()
+            // should mark the parameter as non-nullable.
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    public static void Test(string? a, string b, string c)
+    {
+        if (b == null)
+            throw new ArgumentNullException(""b"");
+        Assert(c != null);
+    }
+    static void Assert([System.Diagnostics.CodeAnalysis.DoesNotReturnIf(parameterValue: false)] bool b)
+    {
+        while(!b);
+    }
+}
+namespace System.Diagnostics.CodeAnalysis {
+    sealed class DoesNotReturnIfAttribute : Attribute {
+        public DoesNotReturnIfAttribute(bool parameterValue) => ParameterValue = parameterValue;
+        public bool ParameterValue { get; }
+    }
+}");
+        }
     }
 }

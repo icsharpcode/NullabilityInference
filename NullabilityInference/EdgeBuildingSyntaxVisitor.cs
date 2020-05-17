@@ -78,10 +78,17 @@ namespace NullabilityInference
 
         protected override TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments)
         {
-            TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
+            TypeWithNode[] typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray() ?? new TypeWithNode[0];
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             switch (symbolInfo.Symbol) {
                 case INamedTypeSymbol ty:
+                    Debug.Assert(ty.TypeParameters.Length == typeArgs.Length);
+                    foreach (var (tp, ta) in ty.TypeParameters.Zip(typeArgs)) {
+                        if (tp.HasNotNullConstraint) {
+                            var edge = CreateEdge(ta.Node, typeSystem.NonNullNode);
+                            edge?.SetLabel("nonnull constraint", node.GetLocation());
+                        }
+                    }
                     if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
                         return new TypeWithNode(ty, mapping[node], typeArgs);
                     } else {
@@ -99,6 +106,18 @@ namespace NullabilityInference
                     return new TypeWithNode(ats, mapping[node], typeArgs);
                 default:
                     return typeSystem.VoidType;
+            }
+        }
+
+        public override TypeWithNode VisitMemberAccessExpression(MemberAccessExpressionSyntax node)
+        {
+            // Can be a type name, e.g. appearing in "Namespace.Type.StaticMethod()".
+            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+            if (symbolInfo.Symbol is INamedTypeSymbol ty) {
+                var typeArgs = CollectTypeArgs(node).Select(Visit).ToArray();
+                return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
+            } else {
+                return HandleAsOperation(node);
             }
         }
 
@@ -271,7 +290,7 @@ namespace NullabilityInference
                 target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
                 targetSubstitution = null;
             }
-            if (!SymbolEqualityComparer.Default.Equals(source.Type, target.Type)) {
+            if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
                 throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
             }
             if (source.Type is INamedTypeSymbol namedType) {
@@ -281,16 +300,7 @@ namespace NullabilityInference
                     tp = namedType.TypeParameters[i];
                     var sourceArg = source.TypeArguments[i];
                     var targetArg = target.TypeArguments[i];
-                    var combinedVariance = (variance, tp.Variance) switch
-                    {
-                        (VarianceKind.None, _) => VarianceKind.None,
-                        (_, VarianceKind.None) => VarianceKind.None,
-                        (VarianceKind.Out, VarianceKind.Out) => VarianceKind.Out,
-                        (VarianceKind.In, VarianceKind.Out) => VarianceKind.In,
-                        (VarianceKind.Out, VarianceKind.In) => VarianceKind.In,
-                        (VarianceKind.In, VarianceKind.In) => VarianceKind.Out,
-                        _ => throw new NotSupportedException("Unknown VarianceKind")
-                    };
+                    var combinedVariance = (variance, tp.Variance).Combine();
                     CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
                 }
             } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {

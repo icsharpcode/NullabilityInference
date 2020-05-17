@@ -82,6 +82,25 @@ namespace NullabilityInference
                 TypeArguments[i].SetName($"{name}!{i}");
             }
         }
+
+        internal IEnumerable<(NullabilityNode, VarianceKind)> NodesWithVariance()
+        {
+            yield return (Node, VarianceKind.Out);
+            if (this.Type is INamedTypeSymbol namedType) {
+                Debug.Assert(this.TypeArguments.Count == namedType.TypeParameters.Length);
+                foreach (var (tp, ta) in namedType.TypeParameters.Zip(this.TypeArguments)) {
+                    foreach (var (n, v) in ta.NodesWithVariance()) {
+                        yield return (n, (v, tp.Variance).Combine());
+                    }
+                }
+            } else if (this.Type is IArrayTypeSymbol || this.Type is IPointerTypeSymbol) {
+                foreach (var pair in this.TypeArguments.Single().NodesWithVariance()) {
+                    yield return pair;
+                }
+            } else {
+                Debug.Assert(this.TypeArguments.Count == 0);
+            }
+        }
     }
 
     public readonly struct TypeSubstitution

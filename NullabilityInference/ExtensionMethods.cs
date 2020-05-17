@@ -46,5 +46,29 @@ namespace NullabilityInference
             }
             return true;
         }
+
+        public static VarianceKind Combine(this (VarianceKind, VarianceKind) variancePair)
+        {
+            return variancePair switch
+            {
+                (VarianceKind.None, _) => VarianceKind.None,
+                (_, VarianceKind.None) => VarianceKind.None,
+                (VarianceKind.Out, VarianceKind.Out) => VarianceKind.Out,
+                (VarianceKind.In, VarianceKind.Out) => VarianceKind.In,
+                (VarianceKind.Out, VarianceKind.In) => VarianceKind.In,
+                (VarianceKind.In, VarianceKind.In) => VarianceKind.Out,
+                _ => throw new NotSupportedException("Unknown VarianceKind")
+            };
+        }
+
+        public static string GetFullName(this ISymbol symbol)
+        {
+            if (symbol.ContainingType != null)
+                return symbol.ContainingType.GetFullName() + "." + symbol.Name;
+            else if (symbol.ContainingNamespace is { IsGlobalNamespace: false })
+                return symbol.ContainingNamespace.GetFullName() + "." + symbol.Name;
+            else
+                return symbol.Name;
+        }
     }
 }

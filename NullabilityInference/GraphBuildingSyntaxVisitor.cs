@@ -33,20 +33,28 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitQualifiedName(QualifiedNameSyntax node)
         {
-            List<TypeSyntax> typeArgs = new List<TypeSyntax>();
-            CollectTypeArgs(node.Left);
-            CollectTypeArgs(node.Right);
-            return HandleTypeName(node, typeArgs);
+            return HandleTypeName(node, CollectTypeArgs(node));
+        }
 
-            void CollectTypeArgs(TypeSyntax s)
+        protected List<TypeSyntax> CollectTypeArgs(ExpressionSyntax node)
+        { 
+            List<TypeSyntax> typeArgs = new List<TypeSyntax>();
+            Visit(node);
+            return typeArgs;
+
+            void Visit(ExpressionSyntax s)
             {
                 switch (s) {
+                    case MemberAccessExpressionSyntax maes:
+                        Visit(maes.Expression);
+                        Visit(maes.Name);
+                        break;
                     case QualifiedNameSyntax qns:
-                        CollectTypeArgs(qns.Left);
-                        CollectTypeArgs(qns.Right);
+                        Visit(qns.Left);
+                        Visit(qns.Right);
                         break;
                     case AliasQualifiedNameSyntax aqns:
-                        CollectTypeArgs(aqns.Name);
+                        Visit(aqns.Name);
                         break;
                     case GenericNameSyntax gns:
                         typeArgs.AddRange(gns.TypeArgumentList.Arguments);
