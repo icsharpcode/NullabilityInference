@@ -376,5 +376,56 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void YieldReturn()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        return Generator(input).Single();
+    }
+    static IEnumerable<string> Generator(string input) {
+        yield return input;
+    }
+}"));
+        }
+
+        [Fact]
+        public void ForeachExplicitlyTyped()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        foreach (string x in new string[] { input }) {
+            return x;
+        }
+        return string.Empty;
+    }
+}"));
+        }
+
+        [Fact]
+        public void ForeachImplicitlyTyped()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        foreach (var x in new[] { input }) {
+            return x;
+        }
+        return string.Empty;
+    }
+}"));
+        }
     }
 }

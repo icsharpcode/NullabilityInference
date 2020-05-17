@@ -246,6 +246,24 @@ namespace NullabilityInference
             return base.VisitThrowStatement(node);
         }
 
+        public override TypeWithNode VisitForEachStatement(ForEachStatementSyntax node)
+        {
+            TypeWithNode elementType;
+            if (node.Type is SimpleNameSyntax { IsVar: true }) {
+                var loopInfo = semanticModel.GetForEachStatementInfo(node);
+                elementType = typeSystem.CreateTemporaryType(loopInfo.ElementType);
+            } else {
+                elementType = node.Type.Accept(this);
+            }
+            var loopVariable = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (loopVariable != null) {
+                typeSystem.AddSymbolType(loopVariable, elementType);
+            }
+            node.Expression.Accept(this);
+            node.Statement.Accept(this);
+            return typeSystem.VoidType;
+        }
+
         private readonly Dictionary<IParameterSymbol, TypeWithNode> parameterTypes = new Dictionary<IParameterSymbol, TypeWithNode>();
 
         private void HandleThrow(ExpressionSyntax? exceptionSyntax)
@@ -276,7 +294,7 @@ namespace NullabilityInference
                 return false;
             if (argument.Expression is LiteralExpressionSyntax literal && literal.Kind() == SyntaxKind.StringLiteralExpression) {
                 string name = literal.Token.ValueText;
-               if (currentMember is IMethodSymbol method) {
+                if (currentMember is IMethodSymbol method) {
                     parameter = method.Parameters.SingleOrDefault(p => p.Name == name);
                 } else if (currentMember is IPropertySymbol property) {
                     parameter = property.Parameters.SingleOrDefault(p => p.Name == name);

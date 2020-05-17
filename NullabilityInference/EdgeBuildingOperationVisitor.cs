@@ -73,9 +73,35 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitForEachLoop(IForEachLoopOperation operation, EdgeBuildingContext argument)
+        {
+            TypeWithNode collection;
+            if (operation.Collection is IConversionOperation { IsImplicit: true, Conversion: { IsReference: true }, Operand: { Type: { TypeKind: TypeKind.Array } } arrayOperand }) {
+                // special case: the operation tree pretends that non-generic IEnumerable is used when iterating over arrays,
+                // but that would cause us to lose information about the element's nullability.
+                collection = arrayOperand.Accept(this, argument);
+            } else {
+                collection = operation.Collection.Accept(this, argument);
+            }
+            Dereference(collection, operation);
+            var loopVariable = operation.LoopControlVariable.Accept(this, argument);
+            var loopInfo = syntaxVisitor.semanticModel.GetForEachStatementInfo((CommonForEachStatementSyntax)operation.Syntax);
+            // HACK: assume we're only iterating over types generic in the iteration element
+            tsBuilder.CreateAssignmentEdge(collection.TypeArguments.Single(), loopVariable);
+            operation.Body.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitBranch(IBranchOperation operation, EdgeBuildingContext argument)
         {
             // goto / break / continue
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitUsing(IUsingOperation operation, EdgeBuildingContext argument)
+        {
             foreach (var child in operation.Children)
                 child.Accept(this, argument);
             return typeSystem.VoidType;
@@ -96,9 +122,17 @@ namespace NullabilityInference
         {
             if (operation.ReturnedValue != null) {
                 var returnVal = operation.ReturnedValue.Accept(this, argument);
+                var returnType = syntaxVisitor.currentMethodReturnType;
+                if (operation.Kind == OperationKind.YieldReturn) {
+                    if (returnType.TypeArguments.Count == 0) {
+                        // returning non-generic enumerable
+                        return typeSystem.VoidType;
+                    }
+                    returnType = returnType.TypeArguments.Single();
+                }
                 var edge = tsBuilder.CreateAssignmentEdge(
                     source: returnVal,
-                    target: syntaxVisitor.currentMethodReturnType);
+                    target: returnType);
                 edge?.SetLabel("return", operation.Syntax.GetLocation());
             }
             return typeSystem.VoidType;
@@ -109,9 +143,9 @@ namespace NullabilityInference
             operation.Condition.Accept(this, argument);
             var whenTrue = operation.WhenTrue.Accept(this, argument);
             var whenFalse = operation.WhenFalse?.Accept(this, argument);
-            Debug.Assert(whenTrue.Node.NullType == NullType.Oblivious);
+            Debug.Assert(whenTrue.Node.NullType == NullType.Oblivious && whenTrue.TypeArguments.Count == 0);
             Debug.Assert(!whenFalse.HasValue || whenFalse.Value.Node.NullType == NullType.Oblivious);
-            return typeSystem.VoidType;
+            return whenTrue;
         }
 
         public override TypeWithNode VisitUnaryOperator(IUnaryOperation operation, EdgeBuildingContext argument)
@@ -366,10 +400,17 @@ namespace NullabilityInference
 
             if (operation.Syntax is ArrayCreationExpressionSyntax syntax) {
                 var arrayType = syntax.Type.Accept(syntaxVisitor);
+                arrayType.SetName("ArrayCreation");
                 if (operation.Initializer != null) {
                     HandleArrayInitializer(operation.Initializer, arrayType, argument);
                 }
-
+                return arrayType;
+            } else if (operation.Syntax is ImplicitArrayCreationExpressionSyntax) {
+                var arrayType = tsBuilder.CreateTemporaryType(operation.Type);
+                arrayType.SetName("ArrayCreation");
+                if (operation.Initializer != null) {
+                    HandleArrayInitializer(operation.Initializer, arrayType, argument);
+                }
                 return arrayType;
             } else {
                 throw new NotImplementedException($"ArrayCreationOperation with syntax={operation.Syntax}");
@@ -427,6 +468,15 @@ namespace NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitDefaultValue(IDefaultValueOperation operation, EdgeBuildingContext argument)
+        {
+            var type = typeSystem.GetObliviousType(operation.Type);
+            if (operation.Type.IsReferenceType) {
+                type = type.WithNode(typeSystem.NullableNode);
+            }
+            return type;
+        }
+
         public override TypeWithNode VisitNameOf(INameOfOperation operation, EdgeBuildingContext argument)
         {
             return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
@@ -452,6 +502,9 @@ namespace NullabilityInference
                 var edge = tsBuilder.CreateEdge(source: input.Node, target: targetType.Node);
                 edge?.SetLabel("Cast", operation.Syntax?.GetLocation());
                 return targetType;
+            } else if (conv.IsDefaultLiteral) {
+                Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, operation.Type));
+                return input;
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }
@@ -525,7 +578,7 @@ namespace NullabilityInference
                 var edge = tsBuilder.CreateAssignmentEdge(source: init, target: variableType);
                 edge?.SetLabel("VarInit", operation.Syntax?.GetLocation());
             }
-            return typeSystem.VoidType;
+            return variableType;
         }
 
         public override TypeWithNode VisitVariableInitializer(IVariableInitializerOperation operation, EdgeBuildingContext argument)
