@@ -216,7 +216,9 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitParameterReference(IParameterReferenceOperation operation, EdgeBuildingContext argument)
         {
-            var parameterType = typeSystem.GetSymbolType(operation.Parameter.OriginalDefinition);
+            if (!localVarTypes.TryGetValue(operation.Parameter, out TypeWithNode parameterType)) {
+                parameterType = typeSystem.GetSymbolType(operation.Parameter);
+            }
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 parameterType = parameterType.WithNode(typeSystem.NonNullNode);
             }
@@ -438,13 +440,13 @@ namespace NullabilityInference
             var conv = operation.GetConversion();
             if (conv.IsThrow || conv.IsConstantExpression) {
                 return typeSystem.GetObliviousType(operation.Type);
-            } else if (conv.IsReference) {
+            } else if (conv.IsReference || conv.IsIdentity) {
                 TypeWithNode targetType;
-                if (conv.IsExplicit && operation.Syntax is CastExpressionSyntax cast) {
+                if (operation.Syntax is CastExpressionSyntax cast) {
                     targetType = cast.Type.Accept(syntaxVisitor);
                 } else {
                     targetType = tsBuilder.CreateTemporaryType(operation.Type);
-                    targetType.SetName("ImplicitReferenceConversion");
+                    targetType.SetName(conv.ToString() + "Conversion");
                 }
                 // TODO: handle type arguments
                 var edge = tsBuilder.CreateEdge(source: input.Node, target: targetType.Node);
@@ -492,8 +494,9 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
-        private readonly Dictionary<ILocalSymbol, TypeWithNode> localVarTypes = new Dictionary<ILocalSymbol, TypeWithNode>();
-        private readonly List<ILocalSymbol> localVariables = new List<ILocalSymbol>(); // used to remove dictionary entries at end of block
+        // Maps implicitly-typed local variables (or lambda parameters) to their inferred type.
+        private readonly Dictionary<ISymbol, TypeWithNode> localVarTypes = new Dictionary<ISymbol, TypeWithNode>();
+        private readonly List<ISymbol> localVariables = new List<ISymbol>(); // used to remove dictionary entries at end of block
 
         public override TypeWithNode VisitVariableDeclaration(IVariableDeclarationOperation operation, EdgeBuildingContext argument)
         {
@@ -569,6 +572,55 @@ namespace NullabilityInference
         {
             // appears e.g. in `_ = string.Empty;`
             return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitDelegateCreation(IDelegateCreationOperation operation, EdgeBuildingContext argument)
+        {
+            var delegateType = operation.Type as INamedTypeSymbol;
+            if (delegateType?.DelegateInvokeMethod == null)
+                throw new NotSupportedException("Could not find Invoke() method for delegate");
+            var type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray());
+            type.SetName("delegate");
+            var substitution = new TypeSubstitution(type.TypeArguments, new TypeWithNode[0]);
+            var delegateReturnType = typeSystem.GetSymbolType(delegateType.DelegateInvokeMethod.OriginalDefinition);
+            delegateReturnType = delegateReturnType.WithSubstitution(delegateType.DelegateInvokeMethod.ReturnType, substitution);
+            var delegateParameters = delegateType.DelegateInvokeMethod.Parameters
+                .Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution)).ToArray();
+            switch (operation.Target) {
+                case IAnonymousFunctionOperation lambda:
+                    // Create edges for lambda parameters
+                    var parameterList = lambda.Syntax switch
+                    {
+                        SimpleLambdaExpressionSyntax syntax => (IReadOnlyList<ParameterSyntax>)new[] { syntax.Parameter },
+                        ParenthesizedLambdaExpressionSyntax lambdaSyntax => lambdaSyntax.ParameterList.Parameters,
+                        _ => throw new NotImplementedException($"Unsupported syntax for lambdas: {lambda.Syntax}")
+                    };
+                    Debug.Assert(parameterList.Count == delegateParameters.Length);
+                    foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
+                        if (lambdaParamSyntax.Type != null) {
+                            var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
+                            tsBuilder.CreateAssignmentEdge(invokeParam, paramType)?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
+                        } else {
+                            // Implicitly typed lambda parameter: treat like a `var` variable initialization
+                            var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
+                            if (lambdaParamSymbol == null)
+                                throw new InvalidOperationException("Could not find symbol for lambda parameter");
+                            localVarTypes.Add(lambdaParamSymbol, invokeParam);
+                        }
+                    }
+                    // Analyze the body, and treat any `return` statements as assignments to `delegateReturnType`.
+                    var outerMethodReturnType = syntaxVisitor.currentMethodReturnType;
+                    try {
+                        syntaxVisitor.currentMethodReturnType = delegateReturnType;
+                        lambda.Body.Accept(this, argument);
+                    } finally {
+                        syntaxVisitor.currentMethodReturnType = outerMethodReturnType;
+                    }
+                    break;
+                default:
+                    throw new NotImplementedException($"DelegateCreation with {operation.Target}");
+            }
+            return type;
         }
     }
 }

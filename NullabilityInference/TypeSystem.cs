@@ -133,9 +133,15 @@ namespace NullabilityInference
         internal IEnumerable<NullabilityNode> NodesInInputPositions {
             get {
                 foreach (var (sym, type) in symbolType) {
-                    if (sym.Kind == SymbolKind.Parameter) {
+                    if (sym is IParameterSymbol param) {
+                        VarianceKind expectedVariance = VarianceKind.Out;
+                        if (param.RefKind == RefKind.Out) {
+                            expectedVariance = VarianceKind.In;
+                        } else if (param.RefKind != RefKind.None) {
+                            continue;
+                        }
                         foreach (var (node, variance) in type.NodesWithVariance()) {
-                            if (variance == VarianceKind.Out) {
+                            if (variance == expectedVariance) {
                                 yield return node;
                             }
                         }

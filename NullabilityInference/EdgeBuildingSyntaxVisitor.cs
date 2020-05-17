@@ -25,7 +25,7 @@ namespace NullabilityInference
     /// </summary>
     internal class EdgeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
     {
-        private readonly SemanticModel semanticModel;
+        internal readonly SemanticModel semanticModel;
         private readonly TypeSystem typeSystem;
         private readonly TypeSystem.Builder typeSystemBuilder;
         private readonly CancellationToken cancellationToken;

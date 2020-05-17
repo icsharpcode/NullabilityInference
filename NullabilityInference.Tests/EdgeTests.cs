@@ -343,10 +343,36 @@ class Program {
         {
             Assert.True(HasPathFromParameterToReturnType(@"
 class Program {
-    public static string Test(string? input) {
+    public static string Test(string input) {
         var tuple = (input, 1);
         (string a, _) = tuple;
         return a;
+    }
+}"));
+        }
+
+        [Fact]
+        public void LambdaImplicitlyTyped()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+class Program {
+    public static string Test(string input) {
+        Func<string, string> f = input => input;
+        return f(input);
+    }
+}"));
+        }
+
+        [Fact]
+        public void LambdaExplicitlyTyped()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+class Program {
+    public static string Test(string input) {
+        Func<string, string> f = (string input) => input;
+        return f(input);
     }
 }"));
         }
