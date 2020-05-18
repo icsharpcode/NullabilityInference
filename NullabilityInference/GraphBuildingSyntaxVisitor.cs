@@ -94,6 +94,8 @@ namespace NullabilityInference
                 return false;
             if (node.Parent is BaseTypeSyntax)
                 return false;
+            if (node.Parent is TypeParameterConstraintClauseSyntax constraint && constraint.Name == node)
+                return false;
             return true;
         }
     }

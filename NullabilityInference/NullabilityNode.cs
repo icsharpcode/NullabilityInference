@@ -122,6 +122,7 @@ namespace NullabilityInference
         }
     }
 
+    [DebuggerDisplay("{Name}")]
     internal sealed class TemporaryNullabilityNode : NullabilityNode
     {
         private static long nextId;

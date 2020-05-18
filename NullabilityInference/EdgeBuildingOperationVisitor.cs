@@ -87,7 +87,8 @@ namespace NullabilityInference
             var loopVariable = operation.LoopControlVariable.Accept(this, argument);
             var loopInfo = syntaxVisitor.semanticModel.GetForEachStatementInfo((CommonForEachStatementSyntax)operation.Syntax);
             // HACK: assume we're only iterating over types generic in the iteration element
-            tsBuilder.CreateAssignmentEdge(collection.TypeArguments.Single(), loopVariable);
+            var edge = tsBuilder.CreateAssignmentEdge(collection.TypeArguments.Single(), loopVariable);
+            edge?.SetLabel("LoopVar", operation.Syntax?.GetLocation());
             operation.Body.Accept(this, argument);
             return typeSystem.VoidType;
         }
@@ -376,7 +377,7 @@ namespace NullabilityInference
         {
             if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
                 var newObjectType = syntax.Type.Accept(syntaxVisitor);
-                var substitution = new TypeSubstitution(currentObjectCreationType.TypeArguments, new TypeWithNode[0]);
+                var substitution = new TypeSubstitution(newObjectType.TypeArguments, new TypeWithNode[0]);
                 HandleArguments(substitution, operation.Arguments, context: argument);
 
                 var oldObjectCreationType = currentObjectCreationType;
@@ -496,17 +497,67 @@ namespace NullabilityInference
                     targetType = cast.Type.Accept(syntaxVisitor);
                 } else {
                     targetType = tsBuilder.CreateTemporaryType(operation.Type);
-                    targetType.SetName(conv.ToString() + "Conversion");
+                    targetType.SetName($"{conv}Conversion");
                 }
-                // TODO: handle type arguments
-                var edge = tsBuilder.CreateEdge(source: input.Node, target: targetType.Node);
-                edge?.SetLabel("Cast", operation.Syntax?.GetLocation());
+                CreateCastEdge(input, targetType, $"{conv}Conversion", operation);
                 return targetType;
             } else if (conv.IsDefaultLiteral) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, operation.Type));
                 return input;
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
+            }
+        }
+
+        private void CreateCastEdge(TypeWithNode input, TypeWithNode target, string label, IOperation operationForLocation)
+        {
+            var edge = tsBuilder.CreateEdge(source: input.Node, target: target.Node);
+            edge?.SetLabel(label, operationForLocation.Syntax?.GetLocation());
+
+            if (input.TypeArguments.Count == 0 && target.TypeArguments.Count == 0) {
+                // If neither type has additional type arguments, we're done here.
+                return;
+            }
+
+            if (target.Type is INamedTypeSymbol namedTargetType
+                && input.GetBaseType(namedTargetType.OriginalDefinition) is TypeWithNode inputBase) {
+                // We might be dealing with
+                //     input.Type = Dictionary<string#1, string#2>#3
+                // and targetType = IEnumerable<KeyValuePair<string#4, string#5>>#6
+                // Then we needs to create edges matching up the key/value type arguments: #4->#1 + #5->#2
+                Debug.Assert(inputBase.TypeArguments.Count == namedTargetType.TypeParameters.Length);
+                Debug.Assert(target.TypeArguments.Count == namedTargetType.TypeParameters.Length);
+                for (int i = 0; i < namedTargetType.TypeParameters.Length; i++) {
+                    switch (namedTargetType.TypeParameters[i].Variance) {
+                        case VarianceKind.None:
+                            tsBuilder.CreateTypeEdge(inputBase.TypeArguments[i], target.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
+                            break;
+                        case VarianceKind.Out:
+                            CreateCastEdge(inputBase.TypeArguments[i], target.TypeArguments[i], label, operationForLocation);
+                            break;
+                        case VarianceKind.In:
+                            CreateCastEdge(target.TypeArguments[i], inputBase.TypeArguments[i], label, operationForLocation);
+                            break;
+                    }
+                }
+            } else if (input.Type is INamedTypeSymbol namedInputType
+                 && target.GetBaseType(namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
+                // Same as above, but for casts in the other direction:
+                Debug.Assert(input.TypeArguments.Count == namedInputType.TypeParameters.Length);
+                Debug.Assert(targetBase.TypeArguments.Count == namedInputType.TypeParameters.Length);
+                for (int i = 0; i < namedInputType.TypeParameters.Length; i++) {
+                    switch (namedInputType.TypeParameters[i].Variance) {
+                        case VarianceKind.None:
+                            tsBuilder.CreateTypeEdge(input.TypeArguments[i], targetBase.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
+                            break;
+                        case VarianceKind.Out:
+                            CreateCastEdge(input.TypeArguments[i], targetBase.TypeArguments[i], label, operationForLocation);
+                            break;
+                        case VarianceKind.In:
+                            CreateCastEdge(targetBase.TypeArguments[i], input.TypeArguments[i], label, operationForLocation);
+                            break;
+                    }
+                }
             }
         }
 

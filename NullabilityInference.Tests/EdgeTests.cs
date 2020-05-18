@@ -395,7 +395,7 @@ class Program {
         }
 
         [Fact]
-        public void ForeachExplicitlyTyped()
+        public void ForeachArrayExplicitlyTyped()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
 using System;
@@ -412,7 +412,7 @@ class Program {
         }
 
         [Fact]
-        public void ForeachImplicitlyTyped()
+        public void ForeachArrayImplicitlyTyped()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
 using System;
@@ -427,5 +427,25 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void ForeachYieldReturn()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        foreach (var x in Generator(input))
+            return x;
+        return string.Empty;
+    }
+    static IEnumerable<string> Generator(string input) {
+        yield return input;
+    }
+}"));
+        }
+
     }
 }
