@@ -101,29 +101,6 @@ namespace NullabilityInference
                 Debug.Assert(this.TypeArguments.Count == 0);
             }
         }
-
-        /// <summary>
-        /// Gets the `TypeWithNode` for the specified base type of this type.
-        /// </summary>
-        internal TypeWithNode? GetBaseType(INamedTypeSymbol baseTypeDefinition)
-        {
-            // Example:
-            //   this = Dictionary<string#1, string#2>#3
-            //   baseTypeDefinition = IEnumerable
-            // ->
-            //   return IEnumerable<KeyValuePair<string#1, string#2>>#3
-            if (this.Type is INamedTypeSymbol namedType) {
-                if (SymbolEqualityComparer.Default.Equals(namedType.OriginalDefinition, baseTypeDefinition)) {
-                    return this; // can occur with identity conversions
-                }
-                if (baseTypeDefinition.TypeKind == TypeKind.Interface) {
-                    throw new NotImplementedException();
-                } else {
-                    throw new NotImplementedException();
-                }
-            }
-            return null;
-        }
     }
 
     public readonly struct TypeSubstitution

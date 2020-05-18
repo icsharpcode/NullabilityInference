@@ -447,5 +447,20 @@ class Program {
 }"));
         }
 
+        [Fact]
+        public void ArrayAsIList()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1];
+        arr[0] = input;
+        IList<string> list = arr;
+        return list.GetEnumerator().Current;
+    }
+}"));
+        }
+
     }
 }

@@ -520,7 +520,7 @@ namespace NullabilityInference
             }
 
             if (target.Type is INamedTypeSymbol namedTargetType
-                && input.GetBaseType(namedTargetType.OriginalDefinition) is TypeWithNode inputBase) {
+                && typeSystem.GetBaseType(input, namedTargetType.OriginalDefinition) is TypeWithNode inputBase) {
                 // We might be dealing with
                 //     input.Type = Dictionary<string#1, string#2>#3
                 // and targetType = IEnumerable<KeyValuePair<string#4, string#5>>#6
@@ -541,7 +541,7 @@ namespace NullabilityInference
                     }
                 }
             } else if (input.Type is INamedTypeSymbol namedInputType
-                 && target.GetBaseType(namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
+                 && typeSystem.GetBaseType(target, namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
                 // Same as above, but for casts in the other direction:
                 Debug.Assert(input.TypeArguments.Count == namedInputType.TypeParameters.Length);
                 Debug.Assert(targetBase.TypeArguments.Count == namedInputType.TypeParameters.Length);

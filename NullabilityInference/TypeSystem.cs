@@ -111,6 +111,40 @@ namespace NullabilityInference
             return new TypeWithNode(type, ObliviousNode);
         }
 
+        /// <summary>
+        /// Gets the `TypeWithNode` for the specified base type of the derivedType.
+        /// </summary>
+        internal TypeWithNode? GetBaseType(TypeWithNode derivedType, INamedTypeSymbol baseTypeDefinition)
+        {
+            // Example:
+            //   this = Dictionary<string#1, string#2>#3
+            //   baseTypeDefinition = IEnumerable
+            // ->
+            //   return IEnumerable<KeyValuePair<string#1, string#2>>#3
+            if (derivedType.Type == null)
+                return null;
+            if (SymbolEqualityComparer.Default.Equals(derivedType.Type.OriginalDefinition, baseTypeDefinition)) {
+                return derivedType; // e.g. identity conversion
+            }
+            if (derivedType.Type is IArrayTypeSymbol arrayType) {
+                foreach (var arrayInterface in arrayType.AllInterfaces) {
+                    if (SymbolEqualityComparer.Default.Equals(arrayInterface.OriginalDefinition, baseTypeDefinition)) {
+                        Debug.Assert(arrayInterface.TypeArguments.Length <= 1);
+                        if (arrayInterface.TypeArguments.Length == 0) {
+                            // non-generic interface implemented by System.Array
+                            return new TypeWithNode(arrayInterface, derivedType.Node);
+                        } else {
+                            // generic interface implemented by System.Array -> type argument will be the array's element type
+                            return new TypeWithNode(arrayInterface, derivedType.Node, derivedType.TypeArguments);
+                        }
+                    }
+                }
+                return null;
+            }
+            //for (INamedTypeSymbol? baseType = derivedType.Type.BaseType; baseType != null; baseType = baseType.BaseType) {}
+            return null;
+        }
+
         public IEnumerable<NullabilityNode> AllNodes {
             get {
                 yield return NullableNode;
