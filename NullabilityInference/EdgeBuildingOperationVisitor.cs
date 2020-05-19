@@ -19,6 +19,7 @@ namespace NullabilityInference
         private readonly EdgeBuildingSyntaxVisitor syntaxVisitor;
         private readonly TypeSystem typeSystem;
         private readonly TypeSystem.Builder tsBuilder;
+        private readonly CSharpCompilation compilation;
 
         internal EdgeBuildingOperationVisitor(EdgeBuildingSyntaxVisitor syntaxVisitor, TypeSystem typeSystem, TypeSystem.Builder tsBuilder)
         {
@@ -280,6 +281,14 @@ namespace NullabilityInference
             }
         }
 
+        private IReadOnlyList<TypeWithNode> ClassTypeArgumentsForMemberAccess(TypeWithNode? receiverType, ISymbol member)
+        {
+            if (receiverType != null) {
+                receiverType = typeSystem.GetBaseType(receiverType.Value, member.ContainingType.OriginalDefinition);
+            }
+            return receiverType?.TypeArguments ?? new TypeWithNode[0];
+        }
+
         public override TypeWithNode VisitFieldReference(IFieldReferenceOperation operation, EdgeBuildingContext argument)
         {
             var receiverType = operation.Instance?.Accept(this, argument);
@@ -288,7 +297,7 @@ namespace NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticField"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var substitution = new TypeSubstitution(receiverType?.TypeArguments ?? new TypeWithNode[0], new TypeWithNode[0]);
+            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Field), new TypeWithNode[0]);
             var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
             fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
@@ -305,7 +314,7 @@ namespace NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticProperty"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var substitution = new TypeSubstitution(receiverType?.TypeArguments ?? new TypeWithNode[0], new TypeWithNode[0]);
+            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Property), new TypeWithNode[0]);
             HandleArguments(substitution, operation.Arguments, context: argument);
             var propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
             propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
@@ -323,7 +332,7 @@ namespace NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticMethod();"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var classTypeArgNodes = receiverType?.TypeArguments ?? new TypeWithNode[0];
+            var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.TargetMethod);
             TypeWithNode[]? methodTypeArgNodes = null;
             if (operation.Syntax is InvocationExpressionSyntax ies) {
                 var typeArgSyntax = FindTypeArgumentList(ies.Expression);
@@ -490,20 +499,32 @@ namespace NullabilityInference
             var input = operation.Operand.Accept(this, argument);
             var conv = operation.GetConversion();
             if (conv.IsThrow || conv.IsConstantExpression) {
-                return typeSystem.GetObliviousType(operation.Type);
-            } else if (conv.IsReference || conv.IsIdentity) {
-                TypeWithNode targetType;
-                if (operation.Syntax is CastExpressionSyntax cast) {
-                    targetType = cast.Type.Accept(syntaxVisitor);
-                } else {
-                    targetType = tsBuilder.CreateTemporaryType(operation.Type);
-                    targetType.SetName($"{conv}Conversion");
-                }
-                CreateCastEdge(input, targetType, $"{conv}Conversion", operation);
-                return targetType;
+                return typeSystem.GetObliviousType(operation.Type).WithNode(input.Node);
+            }
+            TypeWithNode targetType;
+            if (operation.Syntax is CastExpressionSyntax cast) {
+                targetType = cast.Type.Accept(syntaxVisitor);
+            } else {
+                targetType = tsBuilder.CreateTemporaryType(operation.Type);
+                targetType.SetName($"{conv}Conversion");
+            }
+            CreateConversionEdge(input, targetType, conv, operation);
+            return targetType;
+        }
+
+        private void CreateConversionEdge(TypeWithNode input, TypeWithNode target, Conversion conv, IOperation operationForLocation)
+        {
+            if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing) {
+                CreateCastEdge(input, target, $"{conv}Conversion", operationForLocation);
             } else if (conv.IsDefaultLiteral) {
-                Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, operation.Type));
-                return input;
+                Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, target.Type));
+                tsBuilder.CreateTypeEdge(input, target, null, VarianceKind.None);
+            } else if (conv.IsTupleConversion || conv.IsTupleLiteralConversion) {
+                Debug.Assert(input.TypeArguments.Count == target.TypeArguments.Count);
+                foreach (var (inputElement, targetElement) in input.TypeArguments.Zip(target.TypeArguments)) {
+                    var elementConv = typeSystem.Compilation.ClassifyConversion(inputElement.Type!, targetElement.Type!);
+                    CreateConversionEdge(inputElement, targetElement, elementConv, operationForLocation);
+                }
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }
@@ -525,9 +546,9 @@ namespace NullabilityInference
                 //     input.Type = Dictionary<string#1, string#2>#3
                 // and targetType = IEnumerable<KeyValuePair<string#4, string#5>>#6
                 // Then we needs to create edges matching up the key/value type arguments: #4->#1 + #5->#2
-                Debug.Assert(inputBase.TypeArguments.Count == namedTargetType.TypeParameters.Length);
-                Debug.Assert(target.TypeArguments.Count == namedTargetType.TypeParameters.Length);
-                for (int i = 0; i < namedTargetType.TypeParameters.Length; i++) {
+                Debug.Assert(inputBase.TypeArguments.Count == namedTargetType.Arity);
+                Debug.Assert(target.TypeArguments.Count == namedTargetType.Arity);
+                for (int i = 0; i < namedTargetType.Arity; i++) {
                     switch (namedTargetType.TypeParameters[i].Variance) {
                         case VarianceKind.None:
                             tsBuilder.CreateTypeEdge(inputBase.TypeArguments[i], target.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
@@ -543,9 +564,9 @@ namespace NullabilityInference
             } else if (input.Type is INamedTypeSymbol namedInputType
                  && typeSystem.GetBaseType(target, namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
                 // Same as above, but for casts in the other direction:
-                Debug.Assert(input.TypeArguments.Count == namedInputType.TypeParameters.Length);
-                Debug.Assert(targetBase.TypeArguments.Count == namedInputType.TypeParameters.Length);
-                for (int i = 0; i < namedInputType.TypeParameters.Length; i++) {
+                Debug.Assert(input.TypeArguments.Count == namedInputType.Arity);
+                Debug.Assert(targetBase.TypeArguments.Count == namedInputType.Arity);
+                for (int i = 0; i < namedInputType.Arity; i++) {
                     switch (namedInputType.TypeParameters[i].Variance) {
                         case VarianceKind.None:
                             tsBuilder.CreateTypeEdge(input.TypeArguments[i], targetBase.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);

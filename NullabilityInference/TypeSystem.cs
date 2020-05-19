@@ -5,6 +5,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Operations;
 
 namespace NullabilityInference
 {
@@ -14,21 +16,23 @@ namespace NullabilityInference
         public NullabilityNode NonNullNode { get; } = new SpecialNullabilityNode(NullType.NonNull);
         public NullabilityNode ObliviousNode { get; } = new SpecialNullabilityNode(NullType.Oblivious);
 
-        private readonly Compilation compilation;
+        private readonly CSharpCompilation compilation;
         private readonly Dictionary<SyntaxTree, SyntaxToNodeMapping> syntaxMapping = new Dictionary<SyntaxTree, SyntaxToNodeMapping>();
         private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
+        private readonly Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode> baseTypes = new Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode>();
         private readonly List<NullabilityNode> additionalNodes = new List<NullabilityNode>();
 
 
         private readonly INamedTypeSymbol voidType;
         public TypeWithNode VoidType => new TypeWithNode(voidType, ObliviousNode);
 
-        public TypeSystem(Compilation compilation)
+        public TypeSystem(CSharpCompilation compilation)
         {
             this.compilation = compilation;
             this.voidType = compilation.GetSpecialType(SpecialType.System_Void);
         }
 
+        public CSharpCompilation Compilation => compilation;
 
         /// <summary>
         /// Adjusts the symbol to use for GetSymbolType() calls.
@@ -111,37 +115,104 @@ namespace NullabilityInference
             return new TypeWithNode(type, ObliviousNode);
         }
 
+        private TypeWithNode GetDirectBase(ITypeSymbol derivedTypeDef, INamedTypeSymbol baseType, INamedTypeSymbol baseTypeInstance, TypeSubstitution substitution)
+        {
+            // Given:
+            //   derivedType = Dictionary<TKey, TValue>
+            //   baseType = IEnumerable<KeyValuePair<TKey, TValue>>
+            //   baseTypeInstance = IEnumerable<KeyValuePair<string, string>>
+            //   substitution = {TKey: string#1, TValue: string#2}
+            // Returns `IEnumerable<KeyValuePair<string#1, string#2>>`
+            if (!baseTypes.TryGetValue((derivedTypeDef, baseType.OriginalDefinition), out var typeWithNode)) {
+                typeWithNode = FromType(baseType, NullableAnnotation.None);
+            }
+            return typeWithNode.WithSubstitution(baseTypeInstance, substitution);
+        }
+
         /// <summary>
-        /// Gets the `TypeWithNode` for the specified base type of the derivedType.
+        /// Gets the `TypeWithNode` for the direct base types (including interface types) of derivedType.
+        /// </summary>
+        private IEnumerable<TypeWithNode> GetDirectBases(TypeWithNode derivedType, bool includeInterfaces = false)
+        {
+            if (derivedType.Type == null)
+                yield break;
+            var substitution = new TypeSubstitution(derivedType.TypeArguments, new TypeWithNode[0]);
+            var derivedTypeDef = derivedType.Type.OriginalDefinition;
+            var baseType = derivedTypeDef.BaseType;
+            var baseTypeInstance = derivedType.Type.BaseType;
+            if (baseType != null && baseTypeInstance != null) {
+                yield return GetDirectBase(derivedTypeDef, baseType, baseTypeInstance, substitution);
+            }
+            if (includeInterfaces) {
+                foreach (var (interfaceType, interfaceTypeInstance) in derivedTypeDef.Interfaces.Zip(derivedType.Type.Interfaces)) {
+                    yield return GetDirectBase(derivedTypeDef, interfaceType, interfaceTypeInstance, substitution);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets all base classes (and optionally interfaces) implemented by the derived type.
+        /// Includes the derived type itself (unless it's an array type).
+        /// </summary>
+        internal IEnumerable<TypeWithNode> GetAllBases(TypeWithNode derivedType, bool includeInterfaces = false)
+        {
+            if (derivedType.Type == null) {
+                yield break;
+            }
+            if (derivedType.Type is IArrayTypeSymbol arrayType) {
+                // For arrays there's no good way to map from `string[]` to `T[]` so that we could substitute `T=string` back into `IEnumerable<T>`.
+                // So just special-case arrays completely:
+                Debug.Assert(derivedType.TypeArguments.Count == 1);
+                if (includeInterfaces) {
+                    foreach (var arrayInterface in arrayType.AllInterfaces) {
+                        Debug.Assert(arrayInterface.Arity <= 1);
+                        if (arrayInterface.Arity == 0) {
+                            // non-generic interface implemented by System.Array
+                            yield return new TypeWithNode(arrayInterface, derivedType.Node);
+                        } else {
+                            // generic interface implemented by System.Array -> type argument will be the array's element type
+                            yield return new TypeWithNode(arrayInterface, derivedType.Node, derivedType.TypeArguments);
+                        }
+                    }
+                }
+                for (INamedTypeSymbol? baseType = arrayType.BaseType; baseType != null; baseType = baseType.BaseType) {
+                    Debug.Assert(baseType.Arity == 0);
+                    yield return new TypeWithNode(baseType, derivedType.Node);
+                }
+                yield break;
+            }
+            var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+            var worklist = new Stack<TypeWithNode>();
+            visited.Add(derivedType.Type.OriginalDefinition);
+            worklist.Push(derivedType);
+            while (worklist.Count > 0) {
+                derivedType = worklist.Pop();
+                yield return derivedType;
+                foreach (var baseType in GetDirectBases(derivedType, includeInterfaces)) {
+                    if (baseType.Type == null)
+                        continue;
+                    if (visited.Add(baseType.Type.OriginalDefinition)) {
+                        worklist.Push(baseType);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Gets the `TypeWithNode` for the specified base type (or specified interface) of the derivedType.
         /// </summary>
         internal TypeWithNode? GetBaseType(TypeWithNode derivedType, INamedTypeSymbol baseTypeDefinition)
         {
             // Example:
-            //   this = Dictionary<string#1, string#2>#3
+            //   derivedType = Dictionary<string#1, string#2>#3
             //   baseTypeDefinition = IEnumerable
             // ->
             //   return IEnumerable<KeyValuePair<string#1, string#2>>#3
-            if (derivedType.Type == null)
-                return null;
-            if (SymbolEqualityComparer.Default.Equals(derivedType.Type.OriginalDefinition, baseTypeDefinition)) {
-                return derivedType; // e.g. identity conversion
-            }
-            if (derivedType.Type is IArrayTypeSymbol arrayType) {
-                foreach (var arrayInterface in arrayType.AllInterfaces) {
-                    if (SymbolEqualityComparer.Default.Equals(arrayInterface.OriginalDefinition, baseTypeDefinition)) {
-                        Debug.Assert(arrayInterface.TypeArguments.Length <= 1);
-                        if (arrayInterface.TypeArguments.Length == 0) {
-                            // non-generic interface implemented by System.Array
-                            return new TypeWithNode(arrayInterface, derivedType.Node);
-                        } else {
-                            // generic interface implemented by System.Array -> type argument will be the array's element type
-                            return new TypeWithNode(arrayInterface, derivedType.Node, derivedType.TypeArguments);
-                        }
-                    }
+            foreach (var baseType in GetAllBases(derivedType, includeInterfaces: baseTypeDefinition.TypeKind == TypeKind.Interface)) {
+                if (SymbolEqualityComparer.Default.Equals(baseType.Type?.OriginalDefinition, baseTypeDefinition)) {
+                    return baseType;
                 }
-                return null;
             }
-            //for (INamedTypeSymbol? baseType = derivedType.Type.BaseType; baseType != null; baseType = baseType.BaseType) {}
             return null;
         }
 
@@ -229,6 +300,14 @@ namespace NullabilityInference
                 AddAction(ts => ts.symbolType.Add(symbol, type));
             }
 
+            public void AddBaseType(INamedTypeSymbol derivedType, TypeWithNode baseType)
+            {
+                if (baseType.Type == null)
+                    return;
+                var key = (derivedType.OriginalDefinition, baseType.Type.OriginalDefinition);
+                AddAction(ts => ts.baseTypes[key] = baseType);
+            }
+
             private readonly List<Action<TypeSystem>> cachedActions = new List<Action<TypeSystem>>();
             private readonly List<TemporaryNullabilityNode> newNodes = new List<TemporaryNullabilityNode>();
             private readonly List<NullabilityEdge> newEdges = new List<NullabilityEdge>();
@@ -244,7 +323,7 @@ namespace NullabilityInference
                     action(typeSystem);
                 }
                 cachedActions.Clear();
-                
+
                 typeSystem.additionalNodes.AddRange(newNodes);
                 newNodes.Clear();
 

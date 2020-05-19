@@ -217,6 +217,17 @@ namespace NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitSimpleBaseType(SimpleBaseTypeSyntax node)
+        {
+            var baseType = node.Type.Accept(this);
+            var typeDecl = node.Ancestors().OfType<TypeDeclarationSyntax>().First();
+            var currentType = semanticModel.GetDeclaredSymbol(typeDecl, cancellationToken);
+            if (currentType is INamedTypeSymbol namedType) {
+                typeSystem.AddBaseType(namedType, baseType);
+            }
+            return baseType;
+        }
+
         public override TypeWithNode VisitObjectCreationExpression(ObjectCreationExpressionSyntax node)
         {
             var typeNode = node.Type.Accept(this);

@@ -317,5 +317,16 @@ namespace System.Diagnostics.CodeAnalysis {
     }
 }");
         }
+
+
+        [Fact]
+        public void Inheritance()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class GenericList : List<(string, string?)> {
+    public void AddDummyEntry() => Add((string.Empty, null));
+}");
+        }
     }
 }
