@@ -505,13 +505,15 @@ namespace NullabilityInference
                 throw new NotImplementedException("Overloaded conversion operator");
             var input = operation.Operand.Accept(this, argument);
             var conv = operation.GetConversion();
-            if (conv.IsThrow || conv.IsConstantExpression) {
-                return typeSystem.GetObliviousType(operation.Type).WithNode(input.Node);
-            }
             TypeWithNode targetType;
             if (operation.Syntax is CastExpressionSyntax cast) {
                 targetType = cast.Type.Accept(syntaxVisitor);
             } else {
+                if (TypeWithNode.Arity(operation.Type) == 0) {
+                    // Optimization: avoid constructing a temporary type node
+                    // for simple casts that don't involve generics.
+                    return new TypeWithNode(operation.Type, input.Node);
+                }
                 targetType = tsBuilder.CreateTemporaryType(operation.Type);
                 targetType.SetName($"{conv}Conversion");
             }
@@ -543,6 +545,11 @@ namespace NullabilityInference
                 if (elementConv.IsNullable)
                     throw new InvalidOperationException("Nullable unwrap failed");
                 CreateConversionEdge(input, target, elementConv, operationForLocation);
+            } else if (conv.IsNumeric) {
+                // OK, no edge required
+                Debug.Assert(target.Node.NullType == NullType.Oblivious);
+            } else if (conv.IsThrow) {
+                // OK, leave target node free-floating
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }

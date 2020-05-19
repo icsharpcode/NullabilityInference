@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace NullabilityInference
 {
@@ -27,12 +28,17 @@ namespace NullabilityInference
             this.Type = type;
             this.Node = node;
             this.TypeArguments = typeArguments ?? emptyTypeArguments;
+            Debug.Assert(this.TypeArguments.Count == Arity(type));
+        }
+
+        public static int Arity(ITypeSymbol? type)
+        {
             if (type is INamedTypeSymbol nt) {
-                Debug.Assert(nt.Arity == this.TypeArguments.Count);
+                return nt.Arity;
             } else if (type is IArrayTypeSymbol || type is IPointerTypeSymbol) {
-                Debug.Assert(this.TypeArguments.Count == 1);
+                return 1;
             } else {
-                Debug.Assert(this.TypeArguments.Count == 0);
+                return 0;
             }
         }
 
