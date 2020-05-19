@@ -142,11 +142,19 @@ namespace NullabilityInference
         public override TypeWithNode VisitConditional(IConditionalOperation operation, EdgeBuildingContext argument)
         {
             operation.Condition.Accept(this, argument);
+            
+            var mergedType = tsBuilder.CreateTemporaryType(operation.Type);
+            mergedType.SetName("?:");
+
             var whenTrue = operation.WhenTrue.Accept(this, argument);
-            var whenFalse = operation.WhenFalse?.Accept(this, argument);
-            Debug.Assert(whenTrue.Node.NullType == NullType.Oblivious && whenTrue.TypeArguments.Count == 0);
-            Debug.Assert(!whenFalse.HasValue || whenFalse.Value.Node.NullType == NullType.Oblivious);
-            return whenTrue;
+            tsBuilder.CreateAssignmentEdge(whenTrue, mergedType)?.SetLabel("then", operation.WhenTrue.Syntax?.GetLocation());
+
+            if (operation.WhenFalse != null) {
+                var whenFalse = operation.WhenFalse.Accept(this, argument);
+                tsBuilder.CreateAssignmentEdge(whenFalse, mergedType)?.SetLabel("else", operation.WhenFalse.Syntax?.GetLocation());
+            }
+
+            return mergedType;
         }
 
         public override TypeWithNode VisitUnaryOperator(IUnaryOperation operation, EdgeBuildingContext argument)

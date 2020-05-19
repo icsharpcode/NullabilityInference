@@ -479,5 +479,30 @@ class Program {
 }"));
         }
 
+        [Fact]
+        public void Conditional1()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+class Program {
+    static bool b;
+    public static string Test(string input) {
+        return b ? input : string.Empty;
+    }
+}"));
+        }
+
+        [Fact]
+        public void Conditional2()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+class Program {
+    static bool b;
+    public static string Test(string input) {
+        return b ? string.Empty : input;
+    }
+}"));
+        }
     }
 }

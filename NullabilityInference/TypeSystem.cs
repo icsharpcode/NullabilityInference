@@ -339,8 +339,10 @@ namespace NullabilityInference
             /// <summary>
             /// Create temporary type nodes for the specified type.
             /// </summary>
-            public TypeWithNode CreateTemporaryType(ITypeSymbol type)
+            public TypeWithNode CreateTemporaryType(ITypeSymbol? type)
             {
+                if (type == null)
+                    return VoidType;
                 if (type is INamedTypeSymbol nts) {
                     var typeArgs = nts.TypeArguments.Select(CreateTemporaryType).ToArray();
                     if (nts.IsReferenceType) {
