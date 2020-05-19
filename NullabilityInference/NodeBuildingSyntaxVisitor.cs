@@ -45,20 +45,14 @@ namespace NullabilityInference
     /// </summary>
     internal sealed class NodeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
     {
-        private readonly SemanticModel semanticModel;
-        private readonly TypeSystem.Builder typeSystem;
-        private readonly CancellationToken cancellationToken;
-
         /// <summary>
         /// Gets the resulting SyntaxToNodeMapping.
         /// </summary>
         public SyntaxToNodeMapping Mapping { get; } = new SyntaxToNodeMapping();
 
         public NodeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem.Builder typeSystem, CancellationToken cancellationToken)
+            : base(semanticModel, typeSystem, cancellationToken)
         {
-            this.semanticModel = semanticModel;
-            this.typeSystem = typeSystem;
-            this.cancellationToken = cancellationToken;
         }
 
         public override TypeWithNode DefaultVisit(SyntaxNode node)

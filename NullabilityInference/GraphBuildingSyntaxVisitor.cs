@@ -2,7 +2,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
+using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -14,6 +16,17 @@ namespace NullabilityInference
     /// </summary>
     internal abstract class GraphBuildingSyntaxVisitor : CSharpSyntaxVisitor<TypeWithNode>
     {
+        internal readonly SemanticModel semanticModel;
+        protected readonly TypeSystem.Builder typeSystem;
+        protected readonly CancellationToken cancellationToken;
+
+        protected GraphBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem.Builder typeSystem, CancellationToken cancellationToken)
+        {
+            this.semanticModel = semanticModel;
+            this.typeSystem = typeSystem;
+            this.cancellationToken = cancellationToken;
+        }
+
         public override TypeWithNode VisitIdentifierName(IdentifierNameSyntax node)
         {
             return HandleTypeName(node, null);
@@ -72,9 +85,12 @@ namespace NullabilityInference
         {
             var ty = node.ElementType.Accept(this);
             if (ty.Type?.IsValueType == true) {
-                // TODO: wrap in `Nullable<T>`
-                // note that T may be a generic struct, so the type may include useful NullabilityNodes that we need to preserve
-                throw new NotImplementedException();
+                var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+                if (symbolInfo.Symbol is INamedTypeSymbol { OriginalDefinition: { SpecialType: SpecialType.System_Nullable_T } } nullableType) {
+                    return new TypeWithNode(nullableType, typeSystem.ObliviousNode, new[] { ty });
+                } else {
+                    throw new NotSupportedException("NullableType should resolve to System_Nullable_T");
+                }
             } else {
                 // Ignore existing nullable reference types; we'll infer them again from scratch.
                 return ty;

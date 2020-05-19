@@ -19,7 +19,6 @@ namespace NullabilityInference
         private readonly EdgeBuildingSyntaxVisitor syntaxVisitor;
         private readonly TypeSystem typeSystem;
         private readonly TypeSystem.Builder tsBuilder;
-        private readonly CSharpCompilation compilation;
 
         internal EdgeBuildingOperationVisitor(EdgeBuildingSyntaxVisitor syntaxVisitor, TypeSystem typeSystem, TypeSystem.Builder tsBuilder)
         {
@@ -265,7 +264,7 @@ namespace NullabilityInference
         {
             switch (operation.ReferenceKind) {
                 case InstanceReferenceKind.ContainingTypeInstance:
-                    return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+                    return typeSystem.GetObliviousType(operation.Type).WithNode(typeSystem.NonNullNode);
                 case InstanceReferenceKind.ImplicitReceiver:
                     return currentObjectCreationType;
                 default:
@@ -525,6 +524,17 @@ namespace NullabilityInference
                     var elementConv = typeSystem.Compilation.ClassifyConversion(inputElement.Type!, targetElement.Type!);
                     CreateConversionEdge(inputElement, targetElement, elementConv, operationForLocation);
                 }
+            } else if (conv.IsNullable) {
+                if (input.Type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T) {
+                    input = input.TypeArguments.Single();
+                }
+                if (target.Type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T) {
+                    target = target.TypeArguments.Single();
+                }
+                var elementConv = typeSystem.Compilation.ClassifyConversion(input.Type!, target.Type!);
+                if (elementConv.IsNullable)
+                    throw new InvalidOperationException("Nullable unwrap failed");
+                CreateConversionEdge(input, target, elementConv, operationForLocation);
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }

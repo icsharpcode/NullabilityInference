@@ -462,5 +462,22 @@ class Program {
 }"));
         }
 
+        [Fact]
+        public void NullableGenericStruct()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+struct Wrap<T> {
+    public T Inner;
+    public Wrap(T inner) { Inner = inner; }
+}
+class Program {
+    public static string Test(string input) {
+        Wrap<string>? wrapped = new Wrap<string>(input);
+        return wrapped.Value.Inner;
+    }
+}"));
+        }
+
     }
 }

@@ -25,19 +25,16 @@ namespace NullabilityInference
     /// </summary>
     internal class EdgeBuildingSyntaxVisitor : GraphBuildingSyntaxVisitor
     {
-        internal readonly SemanticModel semanticModel;
-        private readonly TypeSystem typeSystem;
+        private readonly new TypeSystem typeSystem;
         private readonly TypeSystem.Builder typeSystemBuilder;
-        private readonly CancellationToken cancellationToken;
         private readonly SyntaxToNodeMapping mapping;
         private readonly EdgeBuildingOperationVisitor operationVisitor;
 
         public EdgeBuildingSyntaxVisitor(SemanticModel semanticModel, TypeSystem typeSystem, TypeSystem.Builder typeSystemBuilder, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
+            : base(semanticModel, typeSystemBuilder, cancellationToken)
         {
-            this.semanticModel = semanticModel;
             this.typeSystem = typeSystem;
             this.typeSystemBuilder = typeSystemBuilder;
-            this.cancellationToken = cancellationToken;
             this.mapping = mapping;
             this.operationVisitor = new EdgeBuildingOperationVisitor(this, typeSystem, typeSystemBuilder);
         }
