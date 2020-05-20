@@ -59,6 +59,34 @@ namespace NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitSwitch(ISwitchOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitSwitchCase(ISwitchCaseOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Body)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitTry(ITryOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitCatchClause(ICatchClauseOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitForLoop(IForLoopOperation operation, EdgeBuildingContext argument)
         {
             foreach (var child in operation.Children)
@@ -142,7 +170,7 @@ namespace NullabilityInference
         public override TypeWithNode VisitConditional(IConditionalOperation operation, EdgeBuildingContext argument)
         {
             operation.Condition.Accept(this, argument);
-            
+
             var mergedType = tsBuilder.CreateTemporaryType(operation.Type);
             mergedType.SetName("?:");
 
@@ -175,10 +203,15 @@ namespace NullabilityInference
 
         public override TypeWithNode VisitBinaryOperator(IBinaryOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.OperatorMethod != null)
-                throw new NotImplementedException("Overloaded operator");
             var lhs = operation.LeftOperand.Accept(this, argument);
             var rhs = operation.RightOperand.Accept(this, argument);
+            if (operation.OperatorMethod != null) {
+                var operatorParams = operation.OperatorMethod.Parameters;
+                Debug.Assert(operatorParams.Length == 2);
+                tsBuilder.CreateAssignmentEdge(lhs, typeSystem.GetSymbolType(operatorParams[0]));
+                tsBuilder.CreateAssignmentEdge(lhs, typeSystem.GetSymbolType(operatorParams[1]));
+                return typeSystem.GetSymbolType(operation.OperatorMethod);
+            }
             if (operation.OperatorKind == BinaryOperatorKind.NotEquals || operation.OperatorKind == BinaryOperatorKind.Equals) {
                 // check for 'Debug.Assert(x != null);'
                 if (IsNullLiteral(operation.RightOperand)) {
@@ -469,6 +502,12 @@ namespace NullabilityInference
             var field = operation.InitializedFields.Single();
             var fieldType = typeSystem.GetSymbolType(field);
             var value = operation.Value.Accept(this, argument);
+            if (fieldType.Type is INamedTypeSymbol { TypeKind: TypeKind.Enum, EnumUnderlyingType: var underlyingType }) {
+                // Special case: enum member declarations can directly assign the underlying type without a conversion node
+                if (SymbolEqualityComparer.Default.Equals(value.Type, underlyingType)) {
+                    fieldType = new TypeWithNode(underlyingType, fieldType.Node);
+                }
+            }
             var edge = tsBuilder.CreateAssignmentEdge(source: value, target: fieldType);
             edge?.SetLabel("FieldInit", operation.Syntax?.GetLocation());
             return typeSystem.VoidType;
@@ -497,6 +536,17 @@ namespace NullabilityInference
         public override TypeWithNode VisitNameOf(INameOfOperation operation, EdgeBuildingContext argument)
         {
             return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+        }
+
+        public override TypeWithNode VisitTypeOf(ITypeOfOperation operation, EdgeBuildingContext argument)
+        {
+            return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+        }
+
+        public override TypeWithNode VisitIsType(IIsTypeOperation operation, EdgeBuildingContext argument)
+        {
+            operation.ValueOperand.Accept(this, argument);
+            return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
         }
 
         public override TypeWithNode VisitConversion(IConversionOperation operation, EdgeBuildingContext argument)

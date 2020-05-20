@@ -144,8 +144,11 @@ namespace NullabilityInference
             IEnumerable<NullabilityNode> includedNodes = typeSystem.AllNodes.Where(n => nodeFilter(n));
             // Add nodes necessary for selected edges
             includedNodes = includedNodes.Concat(graphEdges.Select(g => g.Source)).Concat(graphEdges.Select(g => g.Target)).Distinct();
+            var nodeIds = new Dictionary<NullabilityNode, string>();
             foreach (NullabilityNode node in includedNodes) {
-                GraphVizNode gvNode = new GraphVizNode(Escape(node.Name)) { label = node.Name, fontsize = 32 };
+                string nodeId = $"n{nodeIds.Count}";
+                nodeIds.Add(node, nodeId);
+                GraphVizNode gvNode = new GraphVizNode(nodeId) { label = node.Name, fontsize = 32 };
                 if (node is SpecialNullabilityNode) {
                     gvNode.fontsize = 24;
                 } else {
@@ -161,7 +164,7 @@ namespace NullabilityInference
                 graph.AddNode(gvNode);
             }
             foreach (NullabilityEdge edge in graphEdges) {
-                var gvEdge = new GraphVizEdge(Escape(edge.Source.Name), Escape(edge.Target.Name));
+                var gvEdge = new GraphVizEdge(nodeIds[edge.Source], nodeIds[edge.Target]);
                 gvEdge.label = edge.Label;
                 gvEdge.fontsize = 8;
                 if (edge.IsError)
@@ -171,11 +174,6 @@ namespace NullabilityInference
                 graph.AddEdge(gvEdge);
             }
             return graph;
-
-            string Escape(string name)
-            {
-                return name.Replace('#', '_').Replace('!', '_');
-            }
         }
 
     }

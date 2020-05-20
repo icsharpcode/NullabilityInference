@@ -144,6 +144,16 @@ namespace NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitCatchDeclaration(CatchDeclarationSyntax node)
+        {
+            var type = node.Type.Accept(this);
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol != null) {
+                typeSystem.AddSymbolType(symbol, type);
+            }
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitParameter(ParameterSyntax node)
         {
             if (node.Type != null) {
@@ -186,6 +196,15 @@ namespace NullabilityInference
         public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
         {
             return HandleMember(node, node.Type);
+        }
+
+        public override TypeWithNode VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node)
+        {
+            var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (symbol != null) {
+                typeSystem.AddSymbolType(symbol, new TypeWithNode(symbol.Type, typeSystem.ObliviousNode));
+            }
+            return base.VisitEnumMemberDeclaration(node);
         }
 
         private ISymbol? currentMember;
