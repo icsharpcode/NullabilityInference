@@ -559,7 +559,7 @@ namespace NullabilityInference
             if (operation.Syntax is CastExpressionSyntax cast) {
                 targetType = cast.Type.Accept(syntaxVisitor);
             } else {
-                if (TypeWithNode.Arity(operation.Type) == 0) {
+                if (operation.Type.FullArity() == 0) {
                     // Optimization: avoid constructing a temporary type node
                     // for simple casts that don't involve generics.
                     return new TypeWithNode(operation.Type, input.Node);
@@ -621,10 +621,12 @@ namespace NullabilityInference
                 //     input.Type = Dictionary<string#1, string#2>#3
                 // and targetType = IEnumerable<KeyValuePair<string#4, string#5>>#6
                 // Then we needs to create edges matching up the key/value type arguments: #4->#1 + #5->#2
-                Debug.Assert(inputBase.TypeArguments.Count == namedTargetType.Arity);
-                Debug.Assert(target.TypeArguments.Count == namedTargetType.Arity);
-                for (int i = 0; i < namedTargetType.Arity; i++) {
-                    switch (namedTargetType.TypeParameters[i].Variance) {
+                int arity = namedTargetType.FullArity();
+                Debug.Assert(inputBase.TypeArguments.Count == arity);
+                Debug.Assert(target.TypeArguments.Count == arity);
+                var namedTargetTypeTypeParameters = namedTargetType.FullTypeParameters().ToList();
+                for (int i = 0; i < arity; i++) {
+                    switch (namedTargetTypeTypeParameters[i].Variance) {
                         case VarianceKind.None:
                             tsBuilder.CreateTypeEdge(inputBase.TypeArguments[i], target.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
                             break;
@@ -639,10 +641,12 @@ namespace NullabilityInference
             } else if (input.Type is INamedTypeSymbol namedInputType
                  && typeSystem.GetBaseType(target, namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
                 // Same as above, but for casts in the other direction:
-                Debug.Assert(input.TypeArguments.Count == namedInputType.Arity);
-                Debug.Assert(targetBase.TypeArguments.Count == namedInputType.Arity);
-                for (int i = 0; i < namedInputType.Arity; i++) {
-                    switch (namedInputType.TypeParameters[i].Variance) {
+                int arity = namedInputType.FullArity();
+                Debug.Assert(input.TypeArguments.Count == arity);
+                Debug.Assert(targetBase.TypeArguments.Count == arity);
+                var namedInputTypeTypeParameters = namedInputType.FullTypeParameters().ToList();
+                for (int i = 0; i < arity; i++) {
+                    switch (namedInputTypeTypeParameters[i].Variance) {
                         case VarianceKind.None:
                             tsBuilder.CreateTypeEdge(input.TypeArguments[i], targetBase.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
                             break;
@@ -779,7 +783,7 @@ namespace NullabilityInference
             var delegateType = operation.Type as INamedTypeSymbol;
             if (delegateType?.DelegateInvokeMethod == null)
                 throw new NotSupportedException("Could not find Invoke() method for delegate");
-            var type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray());
+            var type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray());
             type.SetName("delegate");
             var substitution = new TypeSubstitution(type.TypeArguments, new TypeWithNode[0]);
             var delegateReturnType = typeSystem.GetSymbolType(delegateType.DelegateInvokeMethod.OriginalDefinition);

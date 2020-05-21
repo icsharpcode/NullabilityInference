@@ -70,6 +70,7 @@ namespace NullabilityInference
             TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is ITypeSymbol ty) {
+                typeArgs = InheritOuterTypeArguments(typeArgs, ty);
                 if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
                     return new TypeWithNode(ty, Mapping.CreateNewNode(node), typeArgs);
                 } else {

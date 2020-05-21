@@ -274,6 +274,22 @@ class Program {
         }
 
         [Fact]
+        public void ListElementViaEnumerator()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var list = new System.Collections.Generic.List<string>();
+        list.Add(input);
+        using (var e = list.GetEnumerator()) {
+            e.MoveNext();
+            return e.Current;
+        }
+    }
+}"));
+        }
+
+        [Fact]
         public void ArrayElement()
         {
             Assert.True(HasPathFromParameterToReturnType(@"

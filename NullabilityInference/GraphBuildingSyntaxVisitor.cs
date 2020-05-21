@@ -81,6 +81,25 @@ namespace NullabilityInference
 
         protected abstract TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments);
 
+        protected TypeWithNode[] InheritOuterTypeArguments(TypeWithNode[]? syntacticTypeArgs, ITypeSymbol ty)
+        {
+            if (ty.ContainingType.FullArity() > 0) {
+                var typeArgs = new TypeWithNode[ty.FullArity()];
+                int pos = typeArgs.Length;
+                if (syntacticTypeArgs != null) {
+                    pos -= syntacticTypeArgs.Length;
+                    Array.Copy(syntacticTypeArgs, 0, typeArgs, pos, syntacticTypeArgs.Length);
+                }
+                var outerTypeParameters = ty.ContainingType.FullTypeArguments().ToList();
+                for (pos--; pos >= 0; pos--) {
+                    typeArgs[pos] = new TypeWithNode(outerTypeParameters[pos], typeSystem.ObliviousNode);
+                }
+                return typeArgs;
+            } else {
+                return syntacticTypeArgs ?? new TypeWithNode[0];
+            }
+        }
+
         public override TypeWithNode VisitNullableType(NullableTypeSyntax node)
         {
             var ty = node.ElementType.Accept(this);

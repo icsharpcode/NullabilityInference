@@ -94,7 +94,7 @@ namespace NullabilityInference
                 _ => ObliviousNode,
             };
             if (type is INamedTypeSymbol nts) {
-                return new TypeWithNode(nts, topLevelNode, nts.TypeArguments.Zip(nts.TypeArgumentNullableAnnotations, FromType).ToArray());
+                return new TypeWithNode(nts, topLevelNode, nts.FullTypeArguments().Zip(nts.FullTypeArgumentNullableAnnotations(), FromType).ToArray());
             } else if (type is IArrayTypeSymbol ats) {
                 return new TypeWithNode(ats, topLevelNode, new[] { FromType(ats.ElementType, ats.ElementNullableAnnotation) });
             } else if (type is IPointerTypeSymbol pts) {
@@ -106,7 +106,7 @@ namespace NullabilityInference
         internal TypeWithNode GetObliviousType(ITypeSymbol type)
         {
             if (type is INamedTypeSymbol nts) {
-                return new TypeWithNode(nts, ObliviousNode, nts.TypeArguments.Select(this.GetObliviousType).ToArray());
+                return new TypeWithNode(nts, ObliviousNode, nts.FullTypeArguments().Select(this.GetObliviousType).ToArray());
             } else if (type is IArrayTypeSymbol ats) {
                 return new TypeWithNode(ats, ObliviousNode, new[] { GetObliviousType(ats.ElementType) });
             } else if (type is IPointerTypeSymbol pts) {
@@ -176,7 +176,6 @@ namespace NullabilityInference
                     }
                 }
                 for (INamedTypeSymbol? baseType = arrayType.BaseType; baseType != null; baseType = baseType.BaseType) {
-                    Debug.Assert(baseType.Arity == 0);
                     yield return new TypeWithNode(baseType, derivedType.Node);
                 }
                 yield break;
@@ -344,7 +343,7 @@ namespace NullabilityInference
                 if (type == null)
                     return VoidType;
                 if (type is INamedTypeSymbol nts) {
-                    var typeArgs = nts.TypeArguments.Select(CreateTemporaryType).ToArray();
+                    var typeArgs = nts.FullTypeArguments().Select(CreateTemporaryType).ToArray();
                     if (nts.IsReferenceType) {
                         return new TypeWithNode(nts, CreateTemporaryNode(), typeArgs);
                     } else {
@@ -374,17 +373,18 @@ namespace NullabilityInference
             {
                 if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
                     // Perform the substitution:
-                    target = targetSubstitution.Value[tp.TypeParameterKind, tp.Ordinal];
+                    target = targetSubstitution.Value[tp.TypeParameterKind, tp.FullOrdinal()];
                     targetSubstitution = null;
                 }
                 if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
                     throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
                 }
                 if (source.Type is INamedTypeSymbol namedType) {
-                    Debug.Assert(source.TypeArguments.Count == namedType.TypeParameters.Length);
-                    Debug.Assert(target.TypeArguments.Count == namedType.TypeParameters.Length);
-                    for (int i = 0; i < namedType.TypeParameters.Length; i++) {
-                        tp = namedType.TypeParameters[i];
+                    var namedTypeTypeParameters = namedType.FullTypeParameters().ToList();
+                    Debug.Assert(source.TypeArguments.Count == namedTypeTypeParameters.Count);
+                    Debug.Assert(target.TypeArguments.Count == namedTypeTypeParameters.Count);
+                    for (int i = 0; i < namedTypeTypeParameters.Count; i++) {
+                        tp = namedTypeTypeParameters[i];
                         var sourceArg = source.TypeArguments[i];
                         var targetArg = target.TypeArguments[i];
                         var combinedVariance = (variance, tp.Variance).Combine();

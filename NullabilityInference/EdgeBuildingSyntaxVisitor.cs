@@ -78,8 +78,9 @@ namespace NullabilityInference
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             switch (symbolInfo.Symbol) {
                 case INamedTypeSymbol ty:
-                    Debug.Assert(ty.TypeParameters.Length == typeArgs.Length);
-                    foreach (var (tp, ta) in ty.TypeParameters.Zip(typeArgs)) {
+                    typeArgs = InheritOuterTypeArguments(typeArgs, ty);
+                    Debug.Assert(ty.FullArity() == typeArgs.Length);
+                    foreach (var (tp, ta) in ty.FullTypeParameters().Zip(typeArgs)) {
                         if (tp.HasNotNullConstraint) {
                             var edge = typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode);
                             edge?.SetLabel("nonnull constraint", node.GetLocation());

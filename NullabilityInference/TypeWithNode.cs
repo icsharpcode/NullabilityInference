@@ -28,18 +28,7 @@ namespace NullabilityInference
             this.Type = type;
             this.Node = node;
             this.TypeArguments = typeArguments ?? emptyTypeArguments;
-            Debug.Assert(this.TypeArguments.Count == Arity(type));
-        }
-
-        public static int Arity(ITypeSymbol? type)
-        {
-            if (type is INamedTypeSymbol nt) {
-                return nt.Arity;
-            } else if (type is IArrayTypeSymbol || type is IPointerTypeSymbol) {
-                return 1;
-            } else {
-                return 0;
-            }
+            Debug.Assert(this.TypeArguments.Count == type.FullArity());
         }
 
         /// <summary>
@@ -58,15 +47,16 @@ namespace NullabilityInference
         internal TypeWithNode WithSubstitution(ITypeSymbol newType, TypeSubstitution subst)
         {
             if (this.Type is ITypeParameterSymbol tp) {
-                var substituted = subst[tp.TypeParameterKind, tp.Ordinal];
+                var substituted = subst[tp.TypeParameterKind, tp.FullOrdinal()];
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(substituted.Type, newType));
                 return substituted;
             } else if (this.Type is INamedTypeSymbol thisNamedTypeSymbol && newType is INamedTypeSymbol newNamedTypeSymbol) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(thisNamedTypeSymbol.OriginalDefinition, newNamedTypeSymbol.OriginalDefinition));
-                Debug.Assert(newNamedTypeSymbol.Arity == this.TypeArguments.Count);
+                Debug.Assert(newNamedTypeSymbol.FullArity() == this.TypeArguments.Count);
                 TypeWithNode[] newTypeArgs = new TypeWithNode[this.TypeArguments.Count];
+                var newNamedTypeSymbolTypeArguments = newNamedTypeSymbol.FullTypeArguments().ToList();
                 for (int i = 0; i < newTypeArgs.Length; i++) {
-                    newTypeArgs[i] = this.TypeArguments[i].WithSubstitution(newNamedTypeSymbol.TypeArguments[i], subst);
+                    newTypeArgs[i] = this.TypeArguments[i].WithSubstitution(newNamedTypeSymbolTypeArguments[i], subst);
                 }
                 return new TypeWithNode(newType, this.Node, newTypeArgs);
             } else if (this.Type is IArrayTypeSymbol thisArrayTypeSymbol && newType is IArrayTypeSymbol newArrayTypeSymbol) {
@@ -93,8 +83,8 @@ namespace NullabilityInference
         {
             yield return (Node, VarianceKind.Out);
             if (this.Type is INamedTypeSymbol namedType) {
-                Debug.Assert(this.TypeArguments.Count == namedType.TypeParameters.Length);
-                foreach (var (tp, ta) in namedType.TypeParameters.Zip(this.TypeArguments)) {
+                Debug.Assert(this.TypeArguments.Count == namedType.FullArity());
+                foreach (var (tp, ta) in namedType.FullTypeParameters().Zip(this.TypeArguments)) {
                     foreach (var (n, v) in ta.NodesWithVariance()) {
                         yield return (n, (v, tp.Variance).Combine());
                     }

@@ -70,5 +70,68 @@ namespace NullabilityInference
             else
                 return symbol.Name;
         }
+
+
+        /// <summary>
+        /// Gets the full arity of the type symbol, including the number of type parameters inherited from outer classes.
+        /// </summary>
+        public static int FullArity(this ITypeSymbol? type)
+        {
+            if (type is INamedTypeSymbol nt) {
+                return nt.Arity + nt.ContainingType.FullArity();
+            } else if (type is IArrayTypeSymbol || type is IPointerTypeSymbol) {
+                return 1;
+            } else {
+                return 0;
+            }
+        }
+
+        /// <summary>
+        /// Gets the full list of type arguments for the type symbol, including the number of type arguments inherited from outer classes.
+        /// </summary>
+        public static IEnumerable<ITypeSymbol> FullTypeArguments(this INamedTypeSymbol type)
+        {
+            if (type.ContainingType != null) {
+                foreach (var inheritedTypeArg in type.ContainingType.FullTypeArguments())
+                    yield return inheritedTypeArg;
+            }
+            foreach (var typeArg in type.TypeArguments)
+                yield return typeArg;
+        }
+
+        /// <summary>
+        /// Gets the full list of type arguments for the type symbol, including the number of type arguments inherited from outer classes.
+        /// </summary>
+        public static IEnumerable<NullableAnnotation> FullTypeArgumentNullableAnnotations(this INamedTypeSymbol type)
+        {
+            if (type.ContainingType != null) {
+                foreach (var inheritedTypeArg in type.ContainingType.FullTypeArgumentNullableAnnotations())
+                    yield return inheritedTypeArg;
+            }
+            foreach (var annotation in type.TypeArgumentNullableAnnotations)
+                yield return annotation;
+        }
+
+        public static IEnumerable<ITypeParameterSymbol> FullTypeParameters(this INamedTypeSymbol type)
+        {
+            if (type.ContainingType != null) {
+                foreach (var inheritedTypeParam in type.ContainingType.FullTypeParameters())
+                    yield return inheritedTypeParam;
+            }
+            foreach (var tp in type.TypeParameters)
+                yield return tp;
+        }
+
+        /// <summary>
+        /// Gets the index of the type parameter in its parent type's FullTypeParameters()
+        /// </summary>
+        public static int FullOrdinal(this ITypeParameterSymbol tp)
+        {
+            if (tp.TypeParameterKind == TypeParameterKind.Type) {
+                return tp.Ordinal + (tp.ContainingType?.ContainingType.FullArity() ?? 0);
+            } else {
+                return tp.Ordinal;
+            }
+        }
     }
 }
