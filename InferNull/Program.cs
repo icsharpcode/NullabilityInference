@@ -58,8 +58,16 @@ Remarks:
         [Argument(0, "Project file name", "The project (.csproj file) for which to infer nullability. This argument is mandatory.")]
         public string ProjectName { get; } = string.Empty;
 
+        [Option("-n|--dry-run", "Do not write result back to disk.", CommandOptionType.NoValue)]
+        public bool DryRun { get; }
+
         [Option("-f|--force", "Allow overwriting uncommitted changes", CommandOptionType.NoValue)]
         public bool Force { get; }
+
+#if DEBUG
+        [Option("-g|--show-graph", "Show type graph. Requires GraphViz dot.exe in PATH.", CommandOptionType.NoValue)]
+        public bool ShowGraph { get; }
+#endif
 
         /// <remarks>Used by reflection in CommandLineApplication.ExecuteAsync</remarks>
         private async Task<int> OnExecuteAsync(CommandLineApplication _)
@@ -81,39 +89,55 @@ Remarks:
             };
 
             var cancellationToken = CancellationToken.None;
-            using (var workspace = await CreateWorkspaceAsync(buildProps)) {
-                await Console.Error.WriteLineAsync("Loading project...");
-                Project project;
-                try {
-                    project = await workspace.OpenProjectAsync(ProjectName, cancellationToken: cancellationToken);
-                } catch (Exception ex) {
-                    await Console.Error.WriteLineAsync(ex.ToString());
-                    return 1;
-                }
-                await Console.Error.WriteLineAsync("Compiling...");
-                var compilation = await project.GetCompilationAsync(cancellationToken) as CSharpCompilation;
-                if (compilation == null) {
-                    await Console.Error.WriteLineAsync("project.GetCompilationAsync() did not return CSharpCompilation");
-                    return 1;
-                }
-                compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
-                bool hasErrors = false;
-                foreach (var diag in compilation.GetDiagnostics(cancellationToken)) {
-                    if (diag.Severity == DiagnosticSeverity.Error) {
-                        await Console.Error.WriteLineAsync(diag.ToString());
-                        hasErrors = true;
-                    }
-                }
-                if (hasErrors) {
-                    await Console.Error.WriteLineAsync("Compilation failed. Cannot infer nullability.");
-                    return 1;
-                }
-                await Console.Error.WriteLineAsync("Analyzing...");
-                var engine = new NullCheckingEngine(compilation);
-                engine.Analyze(cancellationToken);
-                engine.ExportTypeGraph().Show();
-
+            using var workspace = await CreateWorkspaceAsync(buildProps);
+            await Console.Error.WriteLineAsync("Loading project...");
+            Project project;
+            try {
+                project = await workspace.OpenProjectAsync(ProjectName, cancellationToken: cancellationToken);
+            } catch (Exception ex) {
+                await Console.Error.WriteLineAsync(ex.ToString());
+                return 1;
             }
+            await Console.Error.WriteLineAsync("Compiling...");
+            var compilation = await project.GetCompilationAsync(cancellationToken) as CSharpCompilation;
+            if (compilation == null) {
+                await Console.Error.WriteLineAsync("project.GetCompilationAsync() did not return CSharpCompilation");
+                return 1;
+            }
+            compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
+            bool hasErrors = false;
+            foreach (var diag in compilation.GetDiagnostics(cancellationToken)) {
+                if (diag.Severity == DiagnosticSeverity.Error) {
+                    await Console.Error.WriteLineAsync(diag.ToString());
+                    hasErrors = true;
+                }
+            }
+            if (hasErrors) {
+                await Console.Error.WriteLineAsync("Compilation failed. Cannot infer nullability.");
+                return 1;
+            }
+            await Console.Error.WriteLineAsync("Inferring nullabilities...");
+            var engine = new NullCheckingEngine(compilation);
+            engine.Analyze(cancellationToken);
+#if DEBUG
+            if (ShowGraph) {
+                await Console.Error.WriteLineAsync("Showing graph...");
+                engine.ExportTypeGraph().Show();
+            }
+#endif
+            if (DryRun) {
+                await Console.Error.WriteLineAsync("Analysis successful. Results are discarded due to --dry-run.");
+            } else {
+                await Console.Error.WriteLineAsync("Writing modified code...");
+                engine.ConvertSyntaxTrees(cancellationToken).ForAll(tree => {
+                    if (string.IsNullOrEmpty(tree.FilePath))
+                        return;
+                    using var stream = new FileStream(tree.FilePath, FileMode.Create, FileAccess.Write);
+                    using var writer = new StreamWriter(stream, tree.Encoding);
+                    writer.Write(tree.GetText(cancellationToken));
+                });
+            }
+            await Console.Error.WriteLineAsync("Success!");
 
             return 0;
         }
