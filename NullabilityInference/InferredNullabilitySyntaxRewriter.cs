@@ -41,12 +41,15 @@ namespace ICSharpCode.NullabilityInference
 
         public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
         {
+            var elementType = node.ElementType.Accept(this);
+            if (elementType == null)
+                return null;
             var symbolInfo = semanticModel.GetSymbolInfo(node);
             if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true }) {
                 // Remove existing nullable reference types
-                return node.ElementType.Accept(this).WithTrailingTrivia(node.GetTrailingTrivia());
+                return elementType.WithTrailingTrivia(node.GetTrailingTrivia());
             } else {
-                return node.ReplaceNode(node.ElementType, node.ElementType.Accept(this));
+                return node.ReplaceNode(node.ElementType, elementType);
             }
         }
 

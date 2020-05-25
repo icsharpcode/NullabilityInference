@@ -261,7 +261,7 @@ namespace ICSharpCode.NullabilityInference
             }
             if (operation.Parent is IArgumentOperation argument) {
                 foreach (var attr in argument.Parameter.GetAttributes()) {
-                    if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
+                    if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
                         if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
                             tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode)?.SetLabel("Assert", operation.Syntax?.GetLocation());
                             break;
@@ -574,7 +574,10 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode targetType;
             if (operation.Syntax is CastExpressionSyntax cast) {
                 targetType = cast.Type.Accept(syntaxVisitor);
+            } else if (operation.Syntax is BinaryExpressionSyntax binary && binary.IsKind(SyntaxKind.AsExpression)) {
+                targetType = binary.Right.Accept(syntaxVisitor).WithNode(typeSystem.NullableNode);
             } else {
+                Debug.Assert(!operation.IsTryCast);
                 if (operation.Type.FullArity() == 0) {
                     // Optimization: avoid constructing a temporary type node
                     // for simple casts that don't involve generics.

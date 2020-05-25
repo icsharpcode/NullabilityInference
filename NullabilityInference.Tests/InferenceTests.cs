@@ -329,14 +329,39 @@ namespace System.Diagnostics.CodeAnalysis {
 }");
         }
 
-
         [Fact]
-        public void Inheritance()
+        public void CallInheritedMethod()
         {
             AssertNullabilityInference(@"
 using System.Collections.Generic;
 class GenericList : List<(string, string?)> {
     public void AddDummyEntry() => Add((string.Empty, null));
+}");
+        }
+
+        [Fact]
+        public void AsCast()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public string? Test(object x)
+    {
+        x.ToString();
+        return x as string;
+    }
+}");
+        }
+
+        [Fact]
+        public void Cast()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public string Test(object x)
+    {
+        x.ToString();
+        return (string)x;
+    }
 }");
         }
     }

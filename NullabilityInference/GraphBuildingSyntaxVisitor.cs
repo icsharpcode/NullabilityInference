@@ -138,14 +138,20 @@ namespace ICSharpCode.NullabilityInference
         {
             if (node is IdentifierNameSyntax { IsVar: true })
                 return false;
-            if (node.Parent is ObjectCreationExpressionSyntax || node.Parent is ArrayCreationExpressionSyntax)
-                return false;
-            if (node.Parent is QualifiedNameSyntax || node.Parent is MemberAccessExpressionSyntax)
-                return false;
-            if (node.Parent is BaseTypeSyntax || node.Parent is ExplicitInterfaceSpecifierSyntax)
-                return false;
             if (node.Parent is TypeParameterConstraintClauseSyntax constraint && constraint.Name == node)
                 return false;
+            switch (node.Parent?.Kind()) {
+                case SyntaxKind.ExplicitInterfaceSpecifier:
+                case SyntaxKind.TypeOfExpression:
+                case SyntaxKind.IsExpression:
+                case SyntaxKind.ObjectCreationExpression:
+                case SyntaxKind.ArrayCreationExpression:
+                case SyntaxKind.QualifiedName:
+                case SyntaxKind.SimpleMemberAccessExpression:
+                case SyntaxKind.SimpleBaseType:
+                case SyntaxKind.AsExpression:
+                    return false;
+            }
             return true;
         }
     }
