@@ -23,7 +23,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
 
-namespace NullabilityInference
+namespace ICSharpCode.NullabilityInference
 {
     /// <summary>
     /// GraphViz graph.
