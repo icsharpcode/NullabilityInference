@@ -146,6 +146,7 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+#if DEBUG
         /// <summary>
         /// Exports the type graph in a form suitable for visualization.
         /// </summary>
@@ -205,6 +206,6 @@ namespace ICSharpCode.NullabilityInference
             }
             return graph;
         }
-
+#endif
     }
 }

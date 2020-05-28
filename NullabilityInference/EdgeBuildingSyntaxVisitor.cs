@@ -284,7 +284,8 @@ namespace ICSharpCode.NullabilityInference
                             var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
                             if (field != null && !initializedMembers.Contains(field)) {
                                 var symbolType = typeSystem.GetSymbolType(field);
-                                typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                                var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
+                                edge?.SetLabel("uninit", location);
                             }
                         }
                     }
@@ -292,7 +293,8 @@ namespace ICSharpCode.NullabilityInference
                     var property = semanticModel.GetDeclaredSymbol(propertyDecl, cancellationToken);
                     if (property != null && !initializedMembers.Contains(property)) {
                         var symbolType = typeSystem.GetSymbolType(property);
-                        typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node)?.SetLabel("uninit", location);
+                        var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
+                        edge?.SetLabel("uninit", location);
                     }
                 }
             }
