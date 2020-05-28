@@ -536,5 +536,22 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void MethodCallThroughInterface()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+interface I {
+    string Identity(string input);
+}
+class Program : I {
+    static I instance = new Program();
+    public static string Test(string input) {
+        return instance.Identity(input);
+    }
+    public string Identity(string input) => input;
+}"));
+        }
     }
 }

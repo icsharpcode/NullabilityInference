@@ -66,6 +66,8 @@ namespace ICSharpCode.NullabilityInference
                 } else {
                     return prop.Parameters[p.Ordinal];
                 }
+            } else if (symbol is IMethodSymbol { MethodKind: MethodKind.PropertyGet, AssociatedSymbol: IPropertySymbol prop2 }) {
+                return prop2;
             }
             return symbol;
         }
@@ -409,12 +411,12 @@ namespace ICSharpCode.NullabilityInference
                 } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {
                     CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance);
                 }
+                NullabilityEdge? edge = null;
                 if (variance == VarianceKind.In || variance == VarianceKind.None)
-                    CreateEdge(target.Node, source.Node);
+                    edge = CreateEdge(target.Node, source.Node);
                 if (variance == VarianceKind.Out || variance == VarianceKind.None)
-                    return CreateEdge(source.Node, target.Node);
-                else
-                    return null;
+                    edge = CreateEdge(source.Node, target.Node);
+                return edge;
             }
 
             /// <summary>

@@ -76,6 +76,18 @@ namespace ICSharpCode.NullabilityInference
             };
         }
 
+        public static VarianceKind ToVariance(this RefKind refKind)
+        {
+            return refKind switch
+            {
+                RefKind.None => VarianceKind.In,
+                RefKind.In => VarianceKind.In,
+                RefKind.Ref => VarianceKind.None,
+                RefKind.Out => VarianceKind.Out,
+                _ => throw new NotSupportedException($"RefKind unsupported: {refKind}")
+            };
+        }
+
         public static string GetFullName(this ISymbol symbol)
         {
             if (symbol.ContainingType != null)

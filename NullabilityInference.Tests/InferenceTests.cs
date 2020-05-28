@@ -364,5 +364,19 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void ImplementInterfaceProperty()
+        {
+            AssertNullabilityInference(@"
+interface I {
+    string A { get; }
+    string? B { get; }
+}
+class Program : I {
+    public string A => string.Empty;
+    public string? B => null;
+}");
+        }
     }
 }

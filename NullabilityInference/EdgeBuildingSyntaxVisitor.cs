@@ -185,11 +185,16 @@ namespace ICSharpCode.NullabilityInference
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
                 if (symbol != null) {
+                    CreateOverrideEdge(symbol, symbol.OverriddenMethod);
                     currentMethodReturnType = typeSystem.GetSymbolType(symbol);
                 } else {
                     currentMethodReturnType = typeSystem.VoidType;
                 }
-                return HandleAsOperation(node);
+                if (node.Body != null || node.ExpressionBody != null) {
+                    return HandleAsOperation(node);
+                } else {
+                    return typeSystem.VoidType;
+                }
             } finally {
                 currentMethodReturnType = outerMethodReturnType;
             }
@@ -201,6 +206,7 @@ namespace ICSharpCode.NullabilityInference
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
                 if (symbol != null) {
+                    CreateOverrideEdge(symbol, symbol.OverriddenProperty);
                     currentMethodReturnType = typeSystem.GetSymbolType(symbol);
                 } else {
                     currentMethodReturnType = typeSystem.VoidType;
@@ -220,6 +226,7 @@ namespace ICSharpCode.NullabilityInference
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
                 if (symbol != null) {
+                    CreateOverrideEdge(symbol, symbol.OverriddenProperty);
                     currentMethodReturnType = typeSystem.GetSymbolType(symbol);
                 } else {
                     currentMethodReturnType = typeSystem.VoidType;
@@ -249,14 +256,53 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitClassDeclaration(ClassDeclarationSyntax node)
         {
+            HandleInterfaceImplementations(node);
             HandleLackOfConstructor(node);
             return base.VisitClassDeclaration(node);
         }
 
         public override TypeWithNode VisitStructDeclaration(StructDeclarationSyntax node)
         {
+            HandleInterfaceImplementations(node);
             HandleLackOfConstructor(node);
             return base.VisitStructDeclaration(node);
+        }
+
+        private void HandleInterfaceImplementations(TypeDeclarationSyntax node)
+        {
+            if (!(semanticModel.GetDeclaredSymbol(node) is INamedTypeSymbol classType))
+                throw new NotSupportedException("TypeDeclarationSyntax must declare INamedTypedSymbol");
+            foreach (var interfaceType in classType.Interfaces) {
+                foreach (var interfaceMember in interfaceType.GetMembers()) {
+                    var classMember = classType.FindImplementationForInterfaceMember(interfaceMember);
+                    if (classMember != null) {
+                        CreateOverrideEdge(classMember, interfaceMember);
+                    }
+                }
+            }
+        }
+
+        private void CreateOverrideEdge(ISymbol overrideSymbol, ISymbol? baseSymbol)
+        {
+            if (baseSymbol == null)
+                return;
+            switch (overrideSymbol, baseSymbol) {
+                case (IMethodSymbol overrideMethod, IMethodSymbol baseMethod):
+                    var overrideType = typeSystem.GetSymbolType(overrideMethod);
+                    var baseType = typeSystem.GetSymbolType(baseMethod);
+                    var edge = typeSystemBuilder.CreateTypeEdge(overrideType, baseType, null, VarianceKind.Out);
+                    edge?.SetLabel("override", null);
+
+                    foreach (var (overrideParam, baseParam) in overrideMethod.Parameters.Zip(baseMethod.Parameters)) {
+                        overrideType = typeSystem.GetSymbolType(overrideParam);
+                        baseType = typeSystem.GetSymbolType(baseParam);
+                        var variance = overrideParam.RefKind.ToVariance();
+                        edge = typeSystemBuilder.CreateTypeEdge(overrideType, baseType, null, variance);
+                        edge?.SetLabel("override", null);
+                    }
+
+                    break;
+            }
         }
 
         private void HandleLackOfConstructor(TypeDeclarationSyntax node)
