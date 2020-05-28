@@ -191,11 +191,13 @@ namespace ICSharpCode.NullabilityInference
             mergedType.SetName("?:");
 
             var whenTrue = operation.WhenTrue.Accept(this, argument);
-            tsBuilder.CreateAssignmentEdge(whenTrue, mergedType)?.SetLabel("then", operation.WhenTrue.Syntax?.GetLocation());
+            var edge = tsBuilder.CreateAssignmentEdge(whenTrue, mergedType);
+            edge?.SetLabel("then", operation.WhenTrue.Syntax?.GetLocation());
 
             if (operation.WhenFalse != null) {
                 var whenFalse = operation.WhenFalse.Accept(this, argument);
-                tsBuilder.CreateAssignmentEdge(whenFalse, mergedType)?.SetLabel("else", operation.WhenFalse.Syntax?.GetLocation());
+                edge = tsBuilder.CreateAssignmentEdge(whenFalse, mergedType);
+                edge?.SetLabel("else", operation.WhenFalse.Syntax?.GetLocation());
             }
 
             return mergedType;
@@ -263,7 +265,8 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var attr in argument.Parameter.GetAttributes()) {
                     if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
                         if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
-                            tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode)?.SetLabel("Assert", operation.Syntax?.GetLocation());
+                            var edge = tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode);
+                            edge?.SetLabel("Assert", operation.Syntax?.GetLocation());
                             break;
                         }
                     }
@@ -822,7 +825,8 @@ namespace ICSharpCode.NullabilityInference
                     foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
                         if (lambdaParamSyntax.Type != null) {
                             var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
-                            tsBuilder.CreateAssignmentEdge(invokeParam, paramType)?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
+                            var edge = tsBuilder.CreateAssignmentEdge(invokeParam, paramType);
+                            edge?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
                         } else {
                             // Implicitly typed lambda parameter: treat like a `var` variable initialization
                             var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
