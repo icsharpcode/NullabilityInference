@@ -848,7 +848,11 @@ namespace ICSharpCode.NullabilityInference
                         foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
                             if (lambdaParamSyntax.Type != null) {
                                 var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
-                                var edge = tsBuilder.CreateAssignmentEdge(invokeParam, paramType);
+                                // C# 8 requires lambda parameters to exactly match the delegate type
+                                // e.g. someEvent += delegate(object? sender, EventArgs? e)
+                                // causes a warning that the EventArgs paramter must not be nullable.
+                                // -> use VarianceKind.None.
+                                var edge = tsBuilder.CreateTypeEdge(invokeParam, paramType, null, VarianceKind.None);
                                 edge?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
                             } else {
                                 // Implicitly typed lambda parameter: treat like a `var` variable initialization

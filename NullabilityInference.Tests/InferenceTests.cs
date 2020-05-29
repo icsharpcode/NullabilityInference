@@ -429,5 +429,21 @@ class Program : I {
     public string? B => null;
 }");
         }
+
+        [Fact]
+        public void RegisterEventHandler()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Timer {
+    public event EventHandler? Tick;
+}
+class Program {
+    public void Test(Timer t)
+    {
+        t.Tick += delegate(object? sender, EventArgs e) {};
+    }
+}");
+        }
     }
 }

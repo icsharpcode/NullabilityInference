@@ -554,6 +554,22 @@ class Program : I {
 }"));
         }
 
+        [Fact]
+        public void MethodCallThroughBaseClass()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Collections.Generic;
+abstract class BaseClass {
+    public abstract string Identity(string input);
+}
+class Program : BaseClass {
+    static BaseClass instance = new Program();
+    public static string Test(string input) {
+        return instance.Identity(input);
+    }
+    public override string Identity(string input) => input;
+}"));
+        }
 
         [Fact]
         public void CustomDelegate()

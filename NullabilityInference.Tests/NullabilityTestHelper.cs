@@ -32,21 +32,15 @@ namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
 {
     public class NullabilityTestHelper
     {
-        private static readonly string refAsmPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            @"Reference Assemblies\Microsoft\Framework\.NETFramework\v4.7.2");
+        private static readonly string refAsmPath = @"c:\program files\dotnet\packs\Microsoft.NETCore.App.Ref\3.1.0\ref\netcoreapp3.1";
         private static readonly Lazy<IEnumerable<MetadataReference>> defaultReferences = new Lazy<IEnumerable<MetadataReference>>(delegate {
             return new[]
             {
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "Facades\\netstandard.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "mscorlib.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Core.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, @"Facades\System.Runtime.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Xml.dll")),
-                    MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "Microsoft.CSharp.dll")),
-                    MetadataReference.CreateFromFile(typeof(ValueTuple).Assembly.Location),
-                    MetadataReference.CreateFromFile(typeof(ValueTask).Assembly.Location),
-                    MetadataReference.CreateFromFile(typeof(Span<>).Assembly.Location),
+                MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Collections.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Runtime.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Linq.dll")),
+                MetadataReference.CreateFromFile(Path.Combine(refAsmPath, "System.Threading.dll")),
             };
         });
 
