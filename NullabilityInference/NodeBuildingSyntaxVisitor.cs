@@ -247,6 +247,18 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitDelegateDeclaration(DelegateDeclarationSyntax node)
+        {
+            node.TypeParameterList?.Accept(this);
+            node.ParameterList.Accept(this);
+            var returnType = node.ReturnType.Accept(this);
+            var delegateType = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            if (delegateType?.DelegateInvokeMethod != null) {
+                typeSystem.AddSymbolType(delegateType.DelegateInvokeMethod, returnType);
+            }
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitSimpleBaseType(SimpleBaseTypeSyntax node)
         {
             var baseType = node.Type.Accept(this);

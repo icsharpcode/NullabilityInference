@@ -553,5 +553,20 @@ class Program : I {
     public string Identity(string input) => input;
 }"));
         }
+
+
+        [Fact]
+        public void CustomDelegate()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+delegate string MyDelegate(string input);
+class Program {
+    public static string Test(string input) {
+        MyDelegate f = delegate(string input) { return input; };
+        return f(input);
+    }
+}"));
+        }
     }
 }
