@@ -150,6 +150,7 @@ namespace ICSharpCode.NullabilityInference
                 case SyntaxKind.SimpleMemberAccessExpression:
                 case SyntaxKind.SimpleBaseType:
                 case SyntaxKind.AsExpression:
+                case SyntaxKind.UsingDirective:
                     return false;
             }
             return true;

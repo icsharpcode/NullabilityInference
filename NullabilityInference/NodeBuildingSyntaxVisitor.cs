@@ -81,12 +81,34 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        private readonly Dictionary<IAliasSymbol, TypeWithNode> aliases = new Dictionary<IAliasSymbol, TypeWithNode>();
+
+        public override TypeWithNode VisitUsingDirective(UsingDirectiveSyntax node)
+        {
+            if (node.Alias != null) {
+                var type = node.Name.Accept(this);
+                var alias = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+                if (alias != null) {
+                    aliases.Add(alias, type);
+                    typeSystem.AddSymbolType(alias, type);
+                }
+                return typeSystem.VoidType;
+            } else {
+                return base.VisitUsingDirective(node);
+            }
+        }
+
         protected override TypeWithNode HandleTypeName(TypeSyntax node, IEnumerable<TypeSyntax>? typeArguments)
         {
             TypeWithNode[]? typeArgs = typeArguments?.Select(s => s.Accept(this)).ToArray();
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is ITypeSymbol ty) {
-                typeArgs = InheritOuterTypeArguments(typeArgs, ty);
+                var alias = semanticModel.GetAliasInfo(node, cancellationToken);
+                if (alias != null) {
+                    typeArgs = aliases[alias].TypeArguments.ToArray();
+                } else {
+                    typeArgs = InheritOuterTypeArguments(typeArgs, ty);
+                }
                 if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
                     return new TypeWithNode(ty, Mapping.CreateNewNode(node), typeArgs);
                 } else {

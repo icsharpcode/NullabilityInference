@@ -494,5 +494,19 @@ class Program
     List<string?> MakeNullList() => new List<string?> { null };
 }");
         }
+
+        [Fact]
+        public void TypeAlias()
+        {
+            AssertNullabilityInference(@"
+using Alias = System.Collections.Generic.List<string?>;
+
+class Program
+{
+    Alias Test1() => new Alias { null };
+    Alias? Test2() => null;
+}
+");
+        }
     }
 }

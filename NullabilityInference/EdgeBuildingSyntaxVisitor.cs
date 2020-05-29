@@ -94,12 +94,17 @@ namespace ICSharpCode.NullabilityInference
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             switch (symbolInfo.Symbol) {
                 case INamedTypeSymbol ty:
-                    typeArgs = InheritOuterTypeArguments(typeArgs, ty);
-                    Debug.Assert(ty.FullArity() == typeArgs.Length);
-                    foreach (var (tp, ta) in ty.FullTypeParameters().Zip(typeArgs)) {
-                        if (tp.HasNotNullConstraint) {
-                            var edge = typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode);
-                            edge?.SetLabel("nonnull constraint", node.GetLocation());
+                    var alias = semanticModel.GetAliasInfo(node, cancellationToken);
+                    if (alias != null) {
+                        typeArgs = typeSystem.GetSymbolType(alias).TypeArguments.ToArray();
+                    } else {
+                        typeArgs = InheritOuterTypeArguments(typeArgs, ty);
+                        Debug.Assert(ty.FullArity() == typeArgs.Length);
+                        foreach (var (tp, ta) in ty.FullTypeParameters().Zip(typeArgs)) {
+                            if (tp.HasNotNullConstraint) {
+                                var edge = typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode);
+                                edge?.SetLabel("nonnull constraint", node.GetLocation());
+                            }
                         }
                     }
                     if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
