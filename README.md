@@ -31,28 +31,28 @@ Note: this is a work in progress. Many C# constructs will trigger a NotImplement
 Let's start with a simple example:
 
 ```csharp
-class C
-{
-    string key;   // #1
-    string value; // #2
-    
-    public C(string key, string value)  // key#3, value#4
-    {
-        this.key = key;
-        this.value = value;
-    }
-    
-    public override int GetHashCode()
-    {
-        return key.GetHashCode();
-    }
-    
-    public static int Main()
-    {
-        C c = new C("abc", null); // #5
-        return c.GetHashCode();
-    }
-}
+ 1: class C
+ 2: {
+ 3:    string key;   // #1
+ 4:    string value; // #2
+ 5:    
+ 6:    public C(string key, string value)  // key#3, value#4
+ 7:    {
+ 8:        this.key = key;
+ 9:        this.value = value;
+10:    }
+11:    
+12:    public override int GetHashCode()
+13:    {
+14:        return key.GetHashCode();
+15:    }
+16:    
+17:    public static int Main()
+18:    {
+19:        C c = new C("abc", null); // #5
+20:        return c.GetHashCode();
+21:    }
+22: }
 ```
 
 We will construct a global "nullability flow graph".
@@ -121,17 +121,17 @@ Any nodes that still remain indeterminate after that, are marked as non-nullable
 Consider this program:
 
 ```csharp
-class Program
-{
-    public static int Test(string input) // input#1
-    {
-        if (input == null)
-        {
-            return -1;
-        }
-        return input.Length;
-    }
-}
+ 1: class Program
+ 2: {
+ 3:     public static int Test(string input) // input#1
+ 4:     {
+ 5:         if (input == null)
+ 6:         {
+ 7:             return -1;
+ 8:         }
+ 9:         return input.Length;
+10:     }
+11: }
 ```
 
 `input` has the type-with-node `string#1`. A member access like `.Length` normally causes us to generate an edge to the special `nonnull` node, to encode that the
@@ -144,23 +144,23 @@ Instead of re-implementing the whole C# nullability analysis, we solve this prob
 of the expression we are analyzing. This works because prior to our analysis, we used the `AllNullableSyntaxRewriter` to mark everything as nullable --
 if despite that the C# compiler still thinks something is non-nullable, it must be protected by a null check.
 
-For the second use of `input` in the return statement, it has `NullableFlowState.NotNull`, so we represent its type-with-node as `string#nonnull` instead of `string#1`.
+For the use of `input` in line 9, it has `NullableFlowState.NotNull`, so we represent its type-with-node as `string#nonnull` instead of `string#1`.
 This way the dereference due to the `.Length` member access creates a harmless edge `nonnull`->`nonnull`. This edge is then discarded because it is not a useful constraint.
 Thus this method does not result in any edges being added to the graph. Without any edge constraining `input`, it will be inferred as nullable due to occurring in input position.
 
 ### Generic method invocations
 
 ```csharp
-class Program
-{
-    public static void Main()
-    {
-        string n = null; // n#1
-        string a = Identity<string>(n); // a#3, type argument is #2
-        string b = Identity<string>("abc"); // b#5, type argument is #4
-    }
-    public static T Identity<T>(T input) => input;
-}
+ 1: class Program
+ 2: {
+ 3:     public static void Main()
+ 4:     {
+ 5:         string n = null; // n#1
+ 6:         string a = Identity<string>(n); // a#3, type argument is #2
+ 7:         string b = Identity<string>("abc"); // b#5, type argument is #4
+ 8:     }
+ 9:     public static T Identity<T>(T input) => input;
+10: }
 ```
 
 With generic methods, we do not create nodes for the type `T`, as that cannot be marked nullable without additional constraints
