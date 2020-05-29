@@ -396,10 +396,11 @@ namespace ICSharpCode.NullabilityInference
                     target = targetSubstitution.Value[tp.TypeParameterKind, tp.FullOrdinal()];
                     targetSubstitution = null;
                 }
-                if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
-                    throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
-                }
+                Debug.Assert(source.Type?.TypeKind == target.Type?.TypeKind);
                 if (source.Type is INamedTypeSymbol namedType) {
+                    if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
+                        throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
+                    }
                     var namedTypeTypeParameters = namedType.FullTypeParameters().ToList();
                     Debug.Assert(source.TypeArguments.Count == namedTypeTypeParameters.Count);
                     Debug.Assert(target.TypeArguments.Count == namedTypeTypeParameters.Count);

@@ -424,6 +424,50 @@ namespace ICSharpCode.NullabilityInference
             return returnType;
         }
 
+        void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, TypeWithNode[] delegateParameters, EdgeBuildingContext context)
+        {
+            var receiverType = operation.Instance?.Accept(this, context);
+            Dereference(receiverType, operation);
+            if (receiverType == null && operation.Syntax is MemberAccessExpressionSyntax { Expression: var receiverSyntax }) {
+                // Look for a syntactic type as in "SomeClass<T>.StaticMethod"
+                receiverType = receiverSyntax.Accept(syntaxVisitor);
+            }
+            var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.Method);
+            TypeWithNode[]? methodTypeArgNodes = null;
+            if (operation.Syntax is ExpressionSyntax es) {
+                var typeArgSyntax = FindTypeArgumentList(es);
+                methodTypeArgNodes = typeArgSyntax?.Arguments.Select(syntaxVisitor.Visit).ToArray();
+            }
+            // If there are no syntactic type arguments, create temporary type nodes instead to represent
+            // the inferred type arguments.
+            methodTypeArgNodes ??= operation.Method.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
+            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+
+            Debug.Assert(operation.Method.Parameters.Length == delegateParameters.Length);
+            foreach (var (methodParam, delegateParam) in operation.Method.Parameters.Zip(delegateParameters)) {
+                var methodParamType = typeSystem.GetSymbolType(methodParam.OriginalDefinition);
+                methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution);
+                var edge = tsBuilder.CreateTypeEdge(delegateParam, methodParamType, substitution, VarianceKind.Out);
+                switch (methodParam.RefKind.ToVariance()) {
+                    case VarianceKind.In:
+                        CreateCastEdge(delegateParam, methodParamType, "MethodGroup", operation);
+                        break;
+                    case VarianceKind.Out:
+                        CreateCastEdge(methodParamType, delegateParam, "MethodGroup", operation);
+                        break;
+                    case VarianceKind.None:
+                        tsBuilder.CreateTypeEdge(delegateParam, methodParamType, targetSubstitution: null, variance: VarianceKind.None);
+                        break;
+                    default:
+                        throw new InvalidOperationException("Invalid variance");
+                }
+            }
+
+            var returnType = typeSystem.GetSymbolType(operation.Method.OriginalDefinition);
+            returnType = returnType.WithSubstitution(operation.Method.ReturnType, substitution);
+            CreateCastEdge(returnType, delegateReturnType, "MethodGroup", operation);
+        }
+
         private TypeArgumentListSyntax? FindTypeArgumentList(ExpressionSyntax expr) => expr switch
         {
             GenericNameSyntax gns => gns.TypeArgumentList,
@@ -453,7 +497,7 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitObjectCreation(IObjectCreationOperation operation, EdgeBuildingContext argument)
         {
             if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
-                var newObjectType = syntax.Type.Accept(syntaxVisitor);
+                var newObjectType = syntax.Type.Accept(syntaxVisitor).WithNode(typeSystem.NonNullNode);
                 var substitution = new TypeSubstitution(newObjectType.TypeArguments, new TypeWithNode[0]);
                 HandleArguments(substitution, operation.Arguments, context: argument);
 
@@ -826,7 +870,14 @@ namespace ICSharpCode.NullabilityInference
             var delegateType = operation.Type as INamedTypeSymbol;
             if (delegateType?.DelegateInvokeMethod == null)
                 throw new NotSupportedException("Could not find Invoke() method for delegate");
-            var type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray());
+            TypeWithNode type;
+            if (operation.Syntax is ObjectCreationExpressionSyntax oce) {
+                type = oce.Type.Accept(syntaxVisitor).WithNode(typeSystem.NonNullNode);
+            } else if (operation.Syntax is CastExpressionSyntax castSyntax) {
+                type = castSyntax.Type.Accept(syntaxVisitor);
+            } else {
+                type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray());
+            }
             type.SetName("delegate");
             var substitution = new TypeSubstitution(type.TypeArguments, new TypeWithNode[0]);
             var delegateReturnType = typeSystem.GetSymbolType(delegateType.DelegateInvokeMethod.OriginalDefinition);
@@ -871,6 +922,9 @@ namespace ICSharpCode.NullabilityInference
                     } finally {
                         syntaxVisitor.currentMethodReturnType = outerMethodReturnType;
                     }
+                    break;
+                case IMethodReferenceOperation methodReference:
+                    HandleMethodGroup(methodReference, delegateReturnType, delegateParameters, context: argument);
                     break;
                 default:
                     throw new NotImplementedException($"DelegateCreation with {operation.Target}");

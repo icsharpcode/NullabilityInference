@@ -445,5 +445,54 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void CreateNullLambda()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    public Func<string?> ImplicitCast() => () => null;
+    public Func<string?> ExplicitCast() => (Func<string?>)(() => null);
+    public Func<string?> NewDelegate() => new Func<string?>(() => null);
+}");
+        }
+
+        [Fact]
+        public void MethodGroup()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    public Func<string?> ImplicitCast(object o) => o.ToString;
+    public Func<string?> ExplicitCast(object o) => (Func<string?>)o.ToString;
+    public Func<string?> NewDelegate(object o) => new Func<string?>(o.ToString);
+}");
+        }
+
+        [Fact]
+        public void GenericMethodGroup()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    public EventHandler MethodGroup() => GenericMethod<object?, EventArgs>;
+    void GenericMethod<A, B>(A a, B b) {}
+}");
+        }
+
+        [Fact]
+        public void VarianceInMethodGroupCapture()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+
+class Program
+{
+    public Func<IEnumerable<string?>> VarianceInMethodGroupCapture() => MakeNullList;
+    List<string?> MakeNullList() => new List<string?> { null };
+}");
+        }
     }
 }
