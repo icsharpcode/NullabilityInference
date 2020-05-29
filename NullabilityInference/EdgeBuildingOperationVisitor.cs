@@ -520,23 +520,23 @@ namespace ICSharpCode.NullabilityInference
                 op.Accept(this, argument);
             }
 
-            if (operation.Syntax is ArrayCreationExpressionSyntax syntax) {
-                var arrayType = syntax.Type.Accept(syntaxVisitor);
-                arrayType.SetName("ArrayCreation");
-                if (operation.Initializer != null) {
-                    HandleArrayInitializer(operation.Initializer, arrayType, argument);
-                }
-                return arrayType;
+            TypeWithNode arrayType;
+            if (operation.IsImplicit) {
+                // e.g. call with params array
+                arrayType = tsBuilder.CreateTemporaryType(operation.Type);
+            } else if (operation.Syntax is ArrayCreationExpressionSyntax syntax) {
+                arrayType = syntax.Type.Accept(syntaxVisitor);
             } else if (operation.Syntax is ImplicitArrayCreationExpressionSyntax) {
-                var arrayType = tsBuilder.CreateTemporaryType(operation.Type);
-                arrayType.SetName("ArrayCreation");
-                if (operation.Initializer != null) {
-                    HandleArrayInitializer(operation.Initializer, arrayType, argument);
-                }
-                return arrayType;
+                // implicitly-typed 'new[] { ... }'
+                arrayType = tsBuilder.CreateTemporaryType(operation.Type);
             } else {
                 throw new NotImplementedException($"ArrayCreationOperation with syntax={operation.Syntax}");
             }
+            arrayType.SetName("ArrayCreation");
+            if (operation.Initializer != null) {
+                HandleArrayInitializer(operation.Initializer, arrayType, argument);
+            }
+            return arrayType;
         }
 
         public override TypeWithNode VisitArrayElementReference(IArrayElementReferenceOperation operation, EdgeBuildingContext argument)

@@ -236,6 +236,16 @@ static class Program {
         }
 
         [Fact]
+        public void CallViaParamsArray()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+static class Program {
+    public static string Test(string input) => Identity(input);
+    public static string Identity(params string[] inputs) => inputs[0];
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
