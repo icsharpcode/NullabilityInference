@@ -260,21 +260,72 @@ class Program {
 }");
         }
 
+        [Fact]
+        public void StaticEventInit()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    static event EventHandler? uninit;
+    static event EventHandler init_nonnull = delegate {};
+    static event EventHandler? init_null = null;
+    static event EventHandler init_nonnull_cctor;
+    static event EventHandler? init_null_cctor;
+
+    static Program() {
+        init_nonnull_cctor = delegate{};
+        init_null_cctor = null;
+    }
+
+    Program() {
+        uninit = delegate{}; // too late, field will still be marked nullable
+    }
+}");
+        }
+
+        [Fact]
+        public void InstanceEventInit()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    event EventHandler? uninit;
+    event EventHandler init_nonnull = delegate {};
+    event EventHandler? init_null = null;
+    event EventHandler init_nonnull_ctor;
+    event EventHandler? init_null_ctor;
+
+    Program() {
+        init_nonnull_ctor = delegate {};
+        init_null_ctor = null;
+    }
+
+    void Set() {
+        uninit = delegate {}; // too late, field will still be marked nullable
+    }
+}");
+        }
+
 
         [Fact]
         public void NoConstructor()
         {
             AssertNullabilityInference(@"
+using System;
 class Program {
     static string? uninit_field { get; set; }
     static string init_field { get; set; } = """";
     static string? uninit_prop { get; set; }
     static string init_prop { get; set; } = """";
+    event EventHandler? uninit_event;
+    event EventHandler init_event = delegate{};
 
     string? uninit_instance_field { get; set; }
     string init_instance_field { get; set; } = """";
     string? uninit_instance_prop { get; set; }
     string init_instance_prop { get; set; } = """";
+    event EventHandler? uninit_instance_event;
+    event EventHandler init_instance_event = delegate{};
 }");
         }
 

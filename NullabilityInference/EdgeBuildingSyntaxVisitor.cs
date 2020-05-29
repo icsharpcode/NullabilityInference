@@ -166,6 +166,8 @@ namespace ICSharpCode.NullabilityInference
                             initializedSymbols.Add(fieldRef.Field);
                         } else if (assgn.Target is IPropertyReferenceOperation propertyRef) {
                             initializedSymbols.Add(propertyRef.Property);
+                        } else if (assgn.Target is IEventReferenceOperation eventRef) {
+                            initializedSymbols.Add(eventRef.Event);
                         }
                     }
                     if (node.Parent is TypeDeclarationSyntax typeSyntax) {
@@ -325,22 +327,29 @@ namespace ICSharpCode.NullabilityInference
                 if (member.Modifiers.Any(SyntaxKind.StaticKeyword) != isStatic)
                     continue;
                 if (member is FieldDeclarationSyntax fieldDecl) {
-                    foreach (var v in fieldDecl.Declaration.Variables) {
-                        if (v.Initializer == null) {
-                            var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
-                            if (field != null && !initializedMembers.Contains(field)) {
-                                var symbolType = typeSystem.GetSymbolType(field);
-                                var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
-                                edge?.SetLabel("uninit", location);
-                            }
-                        }
-                    }
+                    MarkField(fieldDecl.Declaration.Variables);
+                } else if (member is EventFieldDeclarationSyntax eventDecl) {
+                    MarkField(eventDecl.Declaration.Variables);
                 } else if (member is PropertyDeclarationSyntax { Initializer: null } propertyDecl && propertyDecl.IsAutoProperty()) {
                     var property = semanticModel.GetDeclaredSymbol(propertyDecl, cancellationToken);
                     if (property != null && !initializedMembers.Contains(property)) {
                         var symbolType = typeSystem.GetSymbolType(property);
                         var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
                         edge?.SetLabel("uninit", location);
+                    }
+                }
+            }
+
+            void MarkField(SeparatedSyntaxList<VariableDeclaratorSyntax> variableDeclarators)
+            {
+                foreach (var v in variableDeclarators) {
+                    if (v.Initializer == null) {
+                        var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
+                        if (field != null && !initializedMembers.Contains(field)) {
+                            var symbolType = typeSystem.GetSymbolType(field);
+                            var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
+                            edge?.SetLabel("uninit", location);
+                        }
                     }
                 }
             }

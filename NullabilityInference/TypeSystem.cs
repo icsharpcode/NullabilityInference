@@ -68,6 +68,8 @@ namespace ICSharpCode.NullabilityInference
                 }
             } else if (symbol is IMethodSymbol { MethodKind: MethodKind.PropertyGet, AssociatedSymbol: IPropertySymbol prop2 }) {
                 return prop2;
+            } else if (symbol is IFieldSymbol { IsImplicitlyDeclared: true } fieldSymbol) {
+                return fieldSymbol.AssociatedSymbol ?? symbol;
             }
             return symbol;
         }

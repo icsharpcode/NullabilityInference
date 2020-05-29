@@ -383,6 +383,23 @@ namespace ICSharpCode.NullabilityInference
             return propertyType;
         }
 
+        public override TypeWithNode VisitEventReference(IEventReferenceOperation operation, EdgeBuildingContext argument)
+        {
+            var receiverType = operation.Instance?.Accept(this, argument);
+            Dereference(receiverType, operation);
+            if (receiverType == null && operation.Syntax is MemberAccessExpressionSyntax { Expression: var receiverSyntax }) {
+                // Look for a syntactic type as in "SomeClass<T>.StaticEvent"
+                receiverType = receiverSyntax.Accept(syntaxVisitor);
+            }
+            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Event), new TypeWithNode[0]);
+            var eventType = typeSystem.GetSymbolType(operation.Event.OriginalDefinition);
+            eventType = eventType.WithSubstitution(operation.Event.Type, substitution);
+            if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
+                eventType = eventType.WithNode(typeSystem.NonNullNode);
+            }
+            return eventType;
+        }
+
         public override TypeWithNode VisitInvocation(IInvocationOperation operation, EdgeBuildingContext argument)
         {
             var receiverType = operation.Instance?.Accept(this, argument);
@@ -704,6 +721,18 @@ namespace ICSharpCode.NullabilityInference
             return target;
         }
 
+        public override TypeWithNode VisitEventAssignment(IEventAssignmentOperation operation, EdgeBuildingContext argument)
+        {
+            // event += value;
+            var eventType = operation.EventReference.Accept(this, argument);
+            var valueType = operation.HandlerValue.Accept(this, argument);
+            // 'event += null;' is always allowed, even if the event isn't nullable
+            eventType = eventType.WithNode(typeSystem.NullableNode);
+            var edge = tsBuilder.CreateAssignmentEdge(source: valueType, target: eventType);
+            edge?.SetLabel("EventAssign", operation.Syntax?.GetLocation());
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitVariableDeclarationGroup(IVariableDeclarationGroupOperation operation, EdgeBuildingContext argument)
         {
             foreach (var child in operation.Children) {
@@ -809,22 +838,25 @@ namespace ICSharpCode.NullabilityInference
                     // Create edges for lambda parameters
                     var parameterList = lambda.Syntax switch
                     {
-                        SimpleLambdaExpressionSyntax syntax => (IReadOnlyList<ParameterSyntax>)new[] { syntax.Parameter },
+                        SimpleLambdaExpressionSyntax syntax => new[] { syntax.Parameter },
                         ParenthesizedLambdaExpressionSyntax lambdaSyntax => lambdaSyntax.ParameterList.Parameters,
+                        AnonymousMethodExpressionSyntax syntax => (IReadOnlyList<ParameterSyntax>?)syntax.ParameterList?.Parameters,
                         _ => throw new NotImplementedException($"Unsupported syntax for lambdas: {lambda.Syntax}")
                     };
-                    Debug.Assert(parameterList.Count == delegateParameters.Length);
-                    foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
-                        if (lambdaParamSyntax.Type != null) {
-                            var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
-                            var edge = tsBuilder.CreateAssignmentEdge(invokeParam, paramType);
-                            edge?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
-                        } else {
-                            // Implicitly typed lambda parameter: treat like a `var` variable initialization
-                            var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
-                            if (lambdaParamSymbol == null)
-                                throw new InvalidOperationException("Could not find symbol for lambda parameter");
-                            localVarTypes.Add(lambdaParamSymbol, invokeParam);
+                    if (parameterList != null) {
+                        Debug.Assert(parameterList.Count == delegateParameters.Length);
+                        foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
+                            if (lambdaParamSyntax.Type != null) {
+                                var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
+                                var edge = tsBuilder.CreateAssignmentEdge(invokeParam, paramType);
+                                edge?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
+                            } else {
+                                // Implicitly typed lambda parameter: treat like a `var` variable initialization
+                                var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
+                                if (lambdaParamSymbol == null)
+                                    throw new InvalidOperationException("Could not find symbol for lambda parameter");
+                                localVarTypes.Add(lambdaParamSymbol, invokeParam);
+                            }
                         }
                     }
                     // Analyze the body, and treat any `return` statements as assignments to `delegateReturnType`.
