@@ -119,8 +119,8 @@ namespace ICSharpCode.NullabilityInference
         {
             var ty = node.ElementType.Accept(this);
             if (ty.Type?.IsValueType == true) {
-                var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-                if (symbolInfo.Symbol is INamedTypeSymbol { OriginalDefinition: { SpecialType: SpecialType.System_Nullable_T } } nullableType) {
+                var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
+                if (typeInfo.Type is INamedTypeSymbol { OriginalDefinition: { SpecialType: SpecialType.System_Nullable_T } } nullableType) {
                     return new TypeWithNode(nullableType, typeSystem.ObliviousNode, new[] { ty });
                 } else {
                     throw new NotSupportedException("NullableType should resolve to System_Nullable_T");
