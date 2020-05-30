@@ -509,6 +509,40 @@ class Program {
         }
 
         [Fact]
+        public void ForeachCustomType()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        foreach (string x in new MyEnumerable(input)) {
+            return x;
+        }
+        return string.Empty;
+    }
+}
+class MyEnumerable
+{
+    string x;
+    public MyEnumerable(string x) { this.x = x; }
+    public MyEnumerator GetEnumerator() => new MyEnumerator(x);
+}
+class MyEnumerator : IEnumerator<string>
+{
+    string x;
+    public MyEnumerator(string x) { this.x = x; }
+    public string Current => x;
+    public bool MoveNext() => true;
+    public void Reset() {}
+    public void Dispose() {}
+    object System.Collections.IEnumerator.Current => x;
+}
+"));
+        }
+
+        [Fact]
         public void ArrayAsIList()
         {
             Assert.True(HasPathFromParameterToReturnType(@"

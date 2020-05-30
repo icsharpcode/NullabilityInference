@@ -119,19 +119,34 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitForEachLoop(IForEachLoopOperation operation, EdgeBuildingContext argument)
         {
+            var loopInfo = syntaxVisitor.semanticModel.GetForEachStatementInfo((CommonForEachStatementSyntax)operation.Syntax);
             TypeWithNode collection;
+            TypeWithNode elementType;
             if (operation.Collection is IConversionOperation { IsImplicit: true, Conversion: { IsReference: true }, Operand: { Type: { TypeKind: TypeKind.Array } } arrayOperand }) {
                 // special case: the operation tree pretends that non-generic IEnumerable is used when iterating over arrays,
                 // but that would cause us to lose information about the element's nullability.
                 collection = arrayOperand.Accept(this, argument);
+                elementType = collection.TypeArguments.Single();
             } else {
                 collection = operation.Collection.Accept(this, argument);
+
+                // Determine the enumerator type (which might have nullabilities dependent on type arguments from the collection type)
+                if (loopInfo.GetEnumeratorMethod == null)
+                    throw new NotSupportedException("foreach loop without GetEnumeratorMethod");
+                var getEnumeratorSubstitution = SubstitutionForMemberAccess(collection, loopInfo.GetEnumeratorMethod);
+                var enumeratorType = typeSystem.GetSymbolType(loopInfo.GetEnumeratorMethod.OriginalDefinition);
+                enumeratorType = enumeratorType.WithSubstitution(loopInfo.GetEnumeratorMethod.ReturnType, getEnumeratorSubstitution);
+
+                // Determine the element type (which might have nullabilities dependent on type arguments from the enumerator type)
+                if (loopInfo.CurrentProperty == null)
+                    throw new NotSupportedException("foreach loop without CurrentProperty");
+                var getCurrentSubstitution = SubstitutionForMemberAccess(enumeratorType, loopInfo.CurrentProperty);
+                elementType = typeSystem.GetSymbolType(loopInfo.CurrentProperty.OriginalDefinition);
+                elementType = elementType.WithSubstitution(loopInfo.CurrentProperty.Type, getCurrentSubstitution);
             }
             Dereference(collection, operation);
             var loopVariable = operation.LoopControlVariable.Accept(this, argument);
-            var loopInfo = syntaxVisitor.semanticModel.GetForEachStatementInfo((CommonForEachStatementSyntax)operation.Syntax);
-            // HACK: assume we're only iterating over types generic in the iteration element
-            var elementType = collection.TypeArguments.Single();
+
             CreateConversionEdge(elementType, loopVariable, loopInfo.ElementConversion, operation);
             operation.Body.Accept(this, argument);
             return typeSystem.VoidType;
@@ -354,6 +369,11 @@ namespace ICSharpCode.NullabilityInference
             return receiverType?.TypeArguments ?? new TypeWithNode[0];
         }
 
+        private TypeSubstitution SubstitutionForMemberAccess(TypeWithNode? receiverType, ISymbol member)
+        {
+            return new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, member), new TypeWithNode[0]);
+        }
+
         public override TypeWithNode VisitFieldReference(IFieldReferenceOperation operation, EdgeBuildingContext argument)
         {
             var receiverType = operation.Instance?.Accept(this, argument);
@@ -362,7 +382,7 @@ namespace ICSharpCode.NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticField"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Field), new TypeWithNode[0]);
+            var substitution = SubstitutionForMemberAccess(receiverType, operation.Field);
             var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
             fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
@@ -379,7 +399,7 @@ namespace ICSharpCode.NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticProperty"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Property), new TypeWithNode[0]);
+            var substitution = SubstitutionForMemberAccess(receiverType, operation.Property);
             HandleArguments(substitution, operation.Arguments, context: argument);
             var propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
             propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
@@ -397,7 +417,7 @@ namespace ICSharpCode.NullabilityInference
                 // Look for a syntactic type as in "SomeClass<T>.StaticEvent"
                 receiverType = receiverSyntax.Accept(syntaxVisitor);
             }
-            var substitution = new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, operation.Event), new TypeWithNode[0]);
+            var substitution = SubstitutionForMemberAccess(receiverType, operation.Event);
             var eventType = typeSystem.GetSymbolType(operation.Event.OriginalDefinition);
             eventType = eventType.WithSubstitution(operation.Event.Type, substitution);
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
@@ -430,7 +450,7 @@ namespace ICSharpCode.NullabilityInference
             return returnType;
         }
 
-        void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, TypeWithNode[] delegateParameters, EdgeBuildingContext context)
+        private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, TypeWithNode[] delegateParameters, EdgeBuildingContext context)
         {
             var receiverType = operation.Instance?.Accept(this, context);
             Dereference(receiverType, operation);
