@@ -56,15 +56,21 @@ namespace ICSharpCode.NullabilityInference
         /// </summary>
         internal static ISymbol SymbolAdjustments(ISymbol symbol)
         {
-            if (symbol is IParameterSymbol { ContainingSymbol: IMethodSymbol { AssociatedSymbol: IPropertySymbol prop } } p) {
+            if (symbol is IParameterSymbol { ContainingSymbol: IMethodSymbol { AssociatedSymbol: var assoc } } p) {
                 // A parameter on an accessor differs from the parameter on the surrounding indexer.
-                if (p.Ordinal >= prop.Parameters.Length) {
+                if (assoc is IPropertySymbol prop) {
+                    if (p.Ordinal >= prop.Parameters.Length) {
+                        Debug.Assert(p.Name == "value");
+                        Debug.Assert(p.Ordinal == prop.Parameters.Length);
+                        // 'value' in property setter has same type as property return type
+                        return prop;
+                    } else {
+                        return prop.Parameters[p.Ordinal];
+                    }
+                } else if (assoc is IEventSymbol ev) {
                     Debug.Assert(p.Name == "value");
-                    Debug.Assert(p.Ordinal == prop.Parameters.Length);
-                    // 'value' in property setter has same type as property return type
-                    return prop;
-                } else {
-                    return prop.Parameters[p.Ordinal];
+                    Debug.Assert(p.Ordinal == 0);
+                    return ev;
                 }
             } else if (symbol is IMethodSymbol { MethodKind: MethodKind.PropertyGet, AssociatedSymbol: IPropertySymbol prop2 }) {
                 return prop2;
@@ -82,7 +88,8 @@ namespace ICSharpCode.NullabilityInference
                     "Entries in the symbolType dictionary should be from the SourceModule.");
                 return type;
             }
-            Debug.Assert(!SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule),
+            Debug.Assert(!SymbolEqualityComparer.Default.Equals(symbol.ContainingModule, compilation.SourceModule)
+                || IsHarmlessIgnoredSymbol(symbol),
                 "Symbols from the SourceModule should be found in the symbolType dictionary.");
             switch (symbol.Kind) {
                 case SymbolKind.Method:
@@ -103,6 +110,17 @@ namespace ICSharpCode.NullabilityInference
                 default:
                     throw new NotImplementedException($"External symbol: {symbol.Kind}");
             }
+        }
+
+        private static bool IsHarmlessIgnoredSymbol(ISymbol symbol)
+        {
+            // Some symbols aren't registered in our type system,
+            // e.g. property setters or event accessors.
+            // But those have return type void, so we can use the FromType() code path without harm.
+            if (symbol is IMethodSymbol method) {
+                return method.ReturnsVoid;
+            }
+            return false;
         }
 
         internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability)

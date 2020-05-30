@@ -471,6 +471,25 @@ class Program {
         }
 
         [Fact]
+        public void ForeachArrayImplicitConversionInLoopVarAssign()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static string Test(string input) {
+        string[] arr = { input };
+        foreach (IEnumerable<string> x in new string[][] { arr }) {
+            foreach (string y in x)
+                return y;
+        }
+        return string.Empty;
+    }
+}"));
+        }
+
+        [Fact]
         public void ForeachYieldReturn()
         {
             Assert.True(HasPathFromParameterToReturnType(@"

@@ -142,6 +142,14 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
         {
             var elementType = node.ElementType.Accept(this);
+            // Handle nested arrays
+            foreach (var rank in node.RankSpecifiers.Skip(1).Reverse()) {
+                // Trying to insert `?` for nested arrays will be tricky,
+                // because `int[,][]` with nullable nested arrays has to turn into `int[]?[,]`
+                // So for now, just handle nested arrays as oblivious.
+                var nestedArrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
+                elementType = new TypeWithNode(nestedArrayType, typeSystem.ObliviousNode, new[] { elementType });
+            }
             var arrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
             var nullNode = CanBeMadeNullableSyntax(node) ? mapping[node] : typeSystem.ObliviousNode;
             return new TypeWithNode(arrayType, nullNode, new[] { elementType });

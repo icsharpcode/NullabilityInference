@@ -131,8 +131,8 @@ namespace ICSharpCode.NullabilityInference
             var loopVariable = operation.LoopControlVariable.Accept(this, argument);
             var loopInfo = syntaxVisitor.semanticModel.GetForEachStatementInfo((CommonForEachStatementSyntax)operation.Syntax);
             // HACK: assume we're only iterating over types generic in the iteration element
-            var edge = tsBuilder.CreateAssignmentEdge(collection.TypeArguments.Single(), loopVariable);
-            edge?.SetLabel("LoopVar", operation.Syntax?.GetLocation());
+            var elementType = collection.TypeArguments.Single();
+            CreateConversionEdge(elementType, loopVariable, loopInfo.ElementConversion, operation);
             operation.Body.Accept(this, argument);
             return typeSystem.VoidType;
         }

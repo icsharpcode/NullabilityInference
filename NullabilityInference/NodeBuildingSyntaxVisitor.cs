@@ -350,7 +350,10 @@ namespace ICSharpCode.NullabilityInference
             if (exceptionSyntax is ObjectCreationExpressionSyntax oce) {
                 if (IsArgumentNullException(oce.Type) && oce.ArgumentList?.Arguments.Count == 1 && IsParameterName(oce.ArgumentList.Arguments.Single(), out var param)) {
                     var paramType = parameterTypes[param];
-                    paramType.Node.ReplaceWith(typeSystem.NonNullNode);
+                    // ignore value type parameters (or unconstrained type parameters)
+                    if (paramType.Node.NullType != NullType.Oblivious) {
+                        paramType.Node.ReplaceWith(typeSystem.NonNullNode);
+                    }
                 }
             }
 
