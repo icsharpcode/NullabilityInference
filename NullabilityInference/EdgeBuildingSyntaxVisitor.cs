@@ -107,7 +107,7 @@ namespace ICSharpCode.NullabilityInference
                             }
                         }
                     }
-                    if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
+                    if (ty.CanBeMadeNullable() && CanBeMadeNullableSyntax(node)) {
                         return new TypeWithNode(ty, mapping[node], typeArgs);
                     } else {
                         return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);

@@ -160,5 +160,16 @@ namespace ICSharpCode.NullabilityInference
                 return tp.Ordinal;
             }
         }
+
+        public static bool CanBeMadeNullable(this ITypeSymbol type)
+        {
+            if (type is ITypeParameterSymbol tp) {
+                // Type parameters can be reference types without having the ": class" constraint,
+                // e.g. when there's a "T : BaseClass" constraint.
+                // However the "T?" syntax requires an actual "T:class" constraint.
+                return tp.HasReferenceTypeConstraint;
+            }
+            return type.IsReferenceType;
+        }
     }
 }

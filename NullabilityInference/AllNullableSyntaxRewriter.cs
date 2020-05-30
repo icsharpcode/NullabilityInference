@@ -82,7 +82,7 @@ namespace ICSharpCode.NullabilityInference
                 return newNode;
             }
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true } && newNode is TypeSyntax newTypeSyntax) {
+            if (symbolInfo.Symbol is ITypeSymbol ty && ty.CanBeMadeNullable() && newNode is TypeSyntax newTypeSyntax) {
                 return SyntaxFactory.NullableType(
                     elementType: newTypeSyntax.WithoutTrailingTrivia(),
                     questionToken: SyntaxFactory.Token(SyntaxKind.QuestionToken)

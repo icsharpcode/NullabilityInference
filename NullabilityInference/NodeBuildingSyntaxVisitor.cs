@@ -109,7 +109,7 @@ namespace ICSharpCode.NullabilityInference
                 } else {
                     typeArgs = InheritOuterTypeArguments(typeArgs, ty);
                 }
-                if (ty.IsReferenceType && CanBeMadeNullableSyntax(node)) {
+                if (ty.CanBeMadeNullable() && CanBeMadeNullableSyntax(node)) {
                     return new TypeWithNode(ty, Mapping.CreateNewNode(node), typeArgs);
                 } else {
                     return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
