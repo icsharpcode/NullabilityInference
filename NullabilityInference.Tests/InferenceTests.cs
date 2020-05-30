@@ -529,5 +529,54 @@ class Program
 }
 ");
         }
+
+        [Fact]
+        public void EventsInInterface()
+        {
+            AssertNullabilityInference(@"
+using System;
+public interface I
+{
+    event EventHandler<EventArgs> A;
+    event EventHandler<EventArgs?> B;
+}
+public class Program : I
+{
+    public event EventHandler<EventArgs>? A;
+    public event EventHandler<EventArgs?>? B;
+
+    public void Invoke()
+    {
+        A?.Invoke(this, EventArgs.Empty);
+        B?.Invoke(this, null);
+    }
+}");
+        }
+
+        [Fact]
+        public void ExplicitEventInterfaceImpl()
+        {
+            AssertNullabilityInference(@"
+using System;
+public interface I
+{
+    event EventHandler<EventArgs> A;
+    event EventHandler<EventArgs?> B;
+}
+public class Program : I
+{
+    EventHandler<EventArgs>? a;
+    EventHandler<EventArgs?>? b;
+
+    event EventHandler<EventArgs> I.A { add { a += value; } remove { a -= value; } }
+    event EventHandler<EventArgs?> I.B { add { b += value; } remove { b -= value; } }
+
+    public void Invoke()
+    {
+        a?.Invoke(this, EventArgs.Empty);
+        b?.Invoke(this, null);
+    }
+}");
+        }
     }
 }

@@ -227,7 +227,7 @@ namespace ICSharpCode.NullabilityInference
                 var operatorParams = operation.OperatorMethod.Parameters;
                 Debug.Assert(operatorParams.Length == 2);
                 tsBuilder.CreateAssignmentEdge(lhs, typeSystem.GetSymbolType(operatorParams[0]));
-                tsBuilder.CreateAssignmentEdge(lhs, typeSystem.GetSymbolType(operatorParams[1]));
+                tsBuilder.CreateAssignmentEdge(rhs, typeSystem.GetSymbolType(operatorParams[1]));
                 return typeSystem.GetSymbolType(operation.OperatorMethod);
             }
             if (operation.OperatorKind == BinaryOperatorKind.NotEquals || operation.OperatorKind == BinaryOperatorKind.Equals) {
@@ -280,7 +280,13 @@ namespace ICSharpCode.NullabilityInference
                 throw new NotImplementedException("Overloaded operator");
             var lhs = operation.Target.Accept(this, argument);
             var rhs = operation.Value.Accept(this, argument);
-            return typeSystem.GetObliviousType(operation.Type);
+            if (operation.Type.TypeKind == TypeKind.Delegate && operation.OperatorKind == BinaryOperatorKind.Add) {
+                var edge = tsBuilder.CreateAssignmentEdge(rhs.WithNode(typeSystem.ObliviousNode), lhs);
+                edge?.SetLabel("delegate combine", operation.Syntax?.GetLocation());
+                return lhs;
+            } else {
+                return typeSystem.GetObliviousType(operation.Type);
+            }
         }
 
         public override TypeWithNode VisitCoalesce(ICoalesceOperation operation, EdgeBuildingContext argument)

@@ -254,6 +254,24 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitEventDeclaration(EventDeclarationSyntax node)
+        {
+            var outerMethodReturnType = currentMethodReturnType;
+            try {
+                var symbol = semanticModel.GetDeclaredSymbol(node);
+                if (symbol != null) {
+                    CreateOverrideEdge(symbol, symbol.OverriddenEvent);
+                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+                } else {
+                    currentMethodReturnType = typeSystem.VoidType;
+                }
+                node.AccessorList?.Accept(this);
+                return typeSystem.VoidType;
+            } finally {
+                currentMethodReturnType = outerMethodReturnType;
+            }
+        }
+
         public override TypeWithNode VisitBlock(BlockSyntax node)
         {
             return HandleAsOperation(node);

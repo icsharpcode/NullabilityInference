@@ -237,6 +237,11 @@ namespace ICSharpCode.NullabilityInference
             return HandleMember(node, node.Type);
         }
 
+        public override TypeWithNode VisitEventDeclaration(EventDeclarationSyntax node)
+        {
+            return HandleMember(node, node.Type);
+        }
+
         public override TypeWithNode VisitEnumMemberDeclaration(EnumMemberDeclarationSyntax node)
         {
             var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
