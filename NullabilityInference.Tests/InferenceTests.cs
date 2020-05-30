@@ -147,6 +147,18 @@ class Program {
         }
 
         [Fact]
+        public void AliasQualifiedName()
+        {
+            AssertNullabilityInference(@"
+class Generic<T> { public static T Value { get; set; } }
+class Program {
+    public static void Main() {
+        global::Generic<string?>.Value = null;
+    }
+}");
+        }
+
+        [Fact]
         public void Array()
         {
             AssertNullabilityInference(@"
