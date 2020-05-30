@@ -147,6 +147,7 @@ namespace ICSharpCode.NullabilityInference
                 case SyntaxKind.ObjectCreationExpression:
                 case SyntaxKind.ArrayCreationExpression:
                 case SyntaxKind.QualifiedName:
+                case SyntaxKind.AliasQualifiedName:
                 case SyntaxKind.SimpleMemberAccessExpression:
                 case SyntaxKind.SimpleBaseType:
                 case SyntaxKind.AsExpression:

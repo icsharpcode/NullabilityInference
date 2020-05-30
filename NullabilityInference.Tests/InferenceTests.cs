@@ -147,6 +147,18 @@ class Program {
         }
 
         [Fact]
+        public void AliasQualifiedName()
+        {
+            AssertNullabilityInference(@"
+class Generic<T> { public static T Value { get; set; } }
+class Program {
+    public static void Main() {
+        global::Generic<string?>.Value = null;
+    }
+}");
+        }
+
+        [Fact]
         public void Array()
         {
             AssertNullabilityInference(@"
@@ -387,6 +399,15 @@ namespace System.Diagnostics.CodeAnalysis {
 using System.Collections.Generic;
 class GenericList : List<(string, string?)> {
     public void AddDummyEntry() => Add((string.Empty, null));
+}");
+        }
+
+        [Fact]
+        public void EnumWithExplicitInherit()
+        {
+            AssertNullabilityInference(@"
+enum MyEnum : int {
+    FirstMember
 }");
         }
 
