@@ -403,6 +403,15 @@ class GenericList : List<(string, string?)> {
         }
 
         [Fact]
+        public void EnumWithExplicitInherit()
+        {
+            AssertNullabilityInference(@"
+enum MyEnum : int {
+    FirstMember
+}");
+        }
+
+        [Fact]
         public void AsCast()
         {
             AssertNullabilityInference(@"
