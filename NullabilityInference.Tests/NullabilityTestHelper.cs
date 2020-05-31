@@ -65,7 +65,7 @@ namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
             compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
             string allNullableText = compilation.SyntaxTrees.Single().GetText().ToString();
             foreach (var diag in compilation.GetDiagnostics(cancellationToken)) {
-                Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString());
+                Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString() + "\r\n\r\nSource:\r\n" + program);
             }
             var engine = new NullCheckingEngine(compilation);
             engine.Analyze(cancellationToken);
@@ -74,7 +74,7 @@ namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
 
         protected static void AssertNullabilityInference(string expectedProgram, string inputProgram = null, CancellationToken cancellationToken = default)
         {
-            inputProgram ??= Regex.Replace(expectedProgram, "(?<![?])[?](?![?.])", "");
+            inputProgram ??= Regex.Replace(expectedProgram, @"(?<![?\s])[?](?![?.\(\)])", "");
             var (_, engine) = CompileAndAnalyze(inputProgram, cancellationToken);
             var newSyntax = engine.ConvertSyntaxTrees(cancellationToken).Single();
             string outputProgram = newSyntax.GetText(cancellationToken).ToString();

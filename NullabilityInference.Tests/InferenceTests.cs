@@ -531,6 +531,19 @@ class Program
         }
 
         [Fact]
+        public void ConstructNewNullableValueDoesNotThrow()
+        {
+            AssertNullabilityInference(@"
+using System;
+
+public class SomeContext
+{
+    public object NullableValue = new int?(3);
+}
+");
+        }
+
+        [Fact]
         public void EventsInInterface()
         {
             AssertNullabilityInference(@"
