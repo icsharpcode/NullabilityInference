@@ -409,8 +409,23 @@ namespace ICSharpCode.NullabilityInference
             }
             var substitution = SubstitutionForMemberAccess(receiverType, operation.Property);
             HandleArguments(substitution, operation.Arguments, context: argument);
-            var propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
-            propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
+            TypeWithNode propertyType;
+            if (operation.Property.ContainingType.IsAnonymousType) {
+                // For anonymous types, we act as if the member types are all type arguments.
+                // Discover the "type argument" index of our property:
+                int propIndex = 0;
+                foreach (var prop in operation.Property.ContainingType.GetMembers().OfType<IPropertySymbol>()) {
+                    if (SymbolEqualityComparer.Default.Equals(prop, operation.Property)) {
+                        break;
+                    } else {
+                        propIndex++;
+                    }
+                }
+                propertyType = substitution.ClassTypeArguments[propIndex];
+            } else {
+                propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
+                propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
+            }
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 propertyType = propertyType.WithNode(typeSystem.NonNullNode);
             }
@@ -556,6 +571,21 @@ namespace ICSharpCode.NullabilityInference
             } else {
                 throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
             }
+        }
+
+        public override TypeWithNode VisitAnonymousObjectCreation(IAnonymousObjectCreationOperation operation, EdgeBuildingContext argument)
+        {
+            var newObjectType = tsBuilder.CreateTemporaryType(operation.Type);
+            newObjectType.SetName("AnonymousObject");
+            var oldObjectCreationType = currentObjectCreationType;
+            try {
+                currentObjectCreationType = newObjectType;
+                foreach (var init in operation.Initializers)
+                    init.Accept(this, argument);
+            } finally {
+                currentObjectCreationType = oldObjectCreationType;
+            }
+            return newObjectType;
         }
 
         public override TypeWithNode VisitArrayCreation(IArrayCreationOperation operation, EdgeBuildingContext argument)

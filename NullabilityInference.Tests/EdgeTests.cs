@@ -661,5 +661,19 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void AnonymousObject()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+class Program {
+    public string Test(string input) {
+        var obj = new { input, other=42 };
+        return obj.input;
+    }
+}"));
+        }
     }
 }

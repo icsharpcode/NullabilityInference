@@ -105,7 +105,13 @@ namespace ICSharpCode.NullabilityInference
         public static int FullArity(this ITypeSymbol? type)
         {
             if (type is INamedTypeSymbol nt) {
-                return nt.Arity + nt.ContainingType.FullArity();
+                int arity = nt.ContainingType.FullArity();
+                if (type.IsAnonymousType) {
+                    arity += nt.GetMembers().OfType<IPropertySymbol>().Count();
+                } else {
+                    arity += nt.Arity;
+                }
+                return arity;
             } else if (type is IArrayTypeSymbol || type is IPointerTypeSymbol) {
                 return 1;
             } else {
@@ -122,8 +128,17 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var inheritedTypeArg in type.ContainingType.FullTypeArguments())
                     yield return inheritedTypeArg;
             }
-            foreach (var typeArg in type.TypeArguments)
-                yield return typeArg;
+            if (type.IsAnonymousType) {
+                // For anonymous types, we act as if the member types are all type arguments.
+                // This lets us track the nullability of indiviual anonymous type members.
+                foreach (var member in type.GetMembers()) {
+                    if (member is IPropertySymbol prop)
+                        yield return prop.Type;
+                }
+            } else {
+                foreach (var typeArg in type.TypeArguments)
+                    yield return typeArg;
+            }
         }
 
         /// <summary>
@@ -135,8 +150,15 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var inheritedTypeArg in type.ContainingType.FullTypeArgumentNullableAnnotations())
                     yield return inheritedTypeArg;
             }
-            foreach (var annotation in type.TypeArgumentNullableAnnotations)
-                yield return annotation;
+            if (type.IsAnonymousType) {
+                foreach (var member in type.GetMembers()) {
+                    if (member is IPropertySymbol)
+                        yield return NullableAnnotation.None;
+                }
+            } else {
+                foreach (var annotation in type.TypeArgumentNullableAnnotations)
+                    yield return annotation;
+            }
         }
 
         public static IEnumerable<ITypeParameterSymbol> FullTypeParameters(this INamedTypeSymbol type)
