@@ -636,5 +636,21 @@ class Derived : Base<string?> {
     }
 }");
         }
+
+        [Fact]
+        public void DelegateAsSystemDelegate()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+    public void A() {
+        Invoke((Action)delegate {});
+    }
+
+    public void Invoke(Delegate d) {
+        d.DynamicInvoke();
+    }
+}");
+        }
     }
 }

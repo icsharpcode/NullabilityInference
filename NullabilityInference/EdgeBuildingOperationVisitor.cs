@@ -656,10 +656,12 @@ namespace ICSharpCode.NullabilityInference
         {
             var input = operation.Operand.Accept(this, argument);
             var conv = operation.GetConversion();
+            SyntaxNode? syntax = operation.IsImplicit ? null : operation.Syntax;
             TypeWithNode targetType;
-            if (operation.Syntax is CastExpressionSyntax cast) {
+            if (syntax is CastExpressionSyntax cast) {
                 targetType = cast.Type.Accept(syntaxVisitor);
-            } else if (operation.Syntax is BinaryExpressionSyntax binary && binary.IsKind(SyntaxKind.AsExpression)) {
+            } else if (syntax is BinaryExpressionSyntax binary && binary.IsKind(SyntaxKind.AsExpression)) {
+                Debug.Assert(operation.IsTryCast);
                 targetType = binary.Right.Accept(syntaxVisitor).WithNode(typeSystem.NullableNode);
             } else {
                 Debug.Assert(!operation.IsTryCast);
