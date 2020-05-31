@@ -212,6 +212,11 @@ namespace ICSharpCode.NullabilityInference
             return HandleMember(node, null);
         }
 
+        public override TypeWithNode VisitDestructorDeclaration(DestructorDeclarationSyntax node)
+        {
+            return HandleMember(node, null);
+        }
+
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
             return HandleMember(node, node.ReturnType);

@@ -196,6 +196,26 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
+            return HandleMethodDeclaration(node);
+        }
+
+        public override TypeWithNode VisitOperatorDeclaration(OperatorDeclarationSyntax node)
+        {
+            return HandleMethodDeclaration(node);
+        }
+
+        public override TypeWithNode VisitConversionOperatorDeclaration(ConversionOperatorDeclarationSyntax node)
+        {
+            return HandleMethodDeclaration(node);
+        }
+
+        public override TypeWithNode VisitDestructorDeclaration(DestructorDeclarationSyntax node)
+        {
+            return HandleMethodDeclaration(node);
+        }
+
+        private TypeWithNode HandleMethodDeclaration(BaseMethodDeclarationSyntax node)
+        { 
             var outerMethodReturnType = currentMethodReturnType;
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);

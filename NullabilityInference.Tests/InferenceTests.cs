@@ -578,5 +578,34 @@ public class Program : I
     }
 }");
         }
+
+
+        [Fact]
+        public void ConversionOperator()
+        {
+            AssertNullabilityInference(@"
+using System;
+class StringBox {
+    string value;
+
+    public StringBox(string? val) { value = val ?? string.Empty; }
+
+    public static implicit operator string?(StringBox? box)
+    {
+        return box?.value;
+    }
+
+    public static string? ImplicitCast()
+    {
+        return new StringBox(null);
+    }
+
+    public static string? ExplicitCast()
+    {
+        return (string?)new StringBox(null);
+    }
+}
+");
+        }
     }
 }

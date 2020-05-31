@@ -649,8 +649,6 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitConversion(IConversionOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.OperatorMethod != null)
-                throw new NotImplementedException("Overloaded conversion operator");
             var input = operation.Operand.Accept(this, argument);
             var conv = operation.GetConversion();
             TypeWithNode targetType;
@@ -660,7 +658,7 @@ namespace ICSharpCode.NullabilityInference
                 targetType = binary.Right.Accept(syntaxVisitor).WithNode(typeSystem.NullableNode);
             } else {
                 Debug.Assert(!operation.IsTryCast);
-                if (operation.Type.FullArity() == 0) {
+                if (operation.Type.FullArity() == 0 && operation.OperatorMethod == null) {
                     // Optimization: avoid constructing a temporary type node
                     // for simple casts that don't involve generics.
                     return new TypeWithNode(operation.Type, input.Node);
@@ -674,7 +672,16 @@ namespace ICSharpCode.NullabilityInference
 
         private void CreateConversionEdge(TypeWithNode input, TypeWithNode target, Conversion conv, IOperation operationForLocation)
         {
-            if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing) {
+            if (conv.IsUserDefined) {
+                var param = conv.MethodSymbol!.Parameters.Single();
+                // TODO: handle operator methods within generic types
+                var paramType = typeSystem.GetSymbolType(param);
+                CreateCastEdge(input, paramType, "UserDefinedInputConversion", operationForLocation);
+
+                // use return type of user-defined operator as input for the remaining conversion
+                var returnType = typeSystem.GetSymbolType(conv.MethodSymbol);
+                CreateCastEdge(returnType, target, "UserDefinedOutputConversion", operationForLocation);
+            } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing) {
                 CreateCastEdge(input, target, $"{conv}Conversion", operationForLocation);
             } else if (conv.IsDefaultLiteral) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, target.Type));
