@@ -430,9 +430,14 @@ namespace ICSharpCode.NullabilityInference
         {
             var receiverType = operation.Instance?.Accept(this, argument);
             Dereference(receiverType, operation);
-            if (receiverType == null && operation.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: var receiverSyntax } }) {
+            if (receiverType == null && operation.Syntax is InvocationExpressionSyntax { Expression: MemberAccessExpressionSyntax { Expression: var receiverSyntax } } invocation) {
                 // Look for a syntactic type as in "SomeClass<T>.StaticMethod();"
-                receiverType = receiverSyntax.Accept(syntaxVisitor);
+                // However this might also be a call to an extension method "someExpr.ExtensionMethod()".
+                // In this case we don't want to visit the 'this' argument expression twice (once via receiverSyntax,
+                // then again via operation.Arguments[0]).
+                if (!syntaxVisitor.IsReducedExtensionMethodCall(invocation)) {
+                    receiverType = receiverSyntax.Accept(syntaxVisitor);
+                }
             }
             var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.TargetMethod);
             TypeWithNode[]? methodTypeArgNodes = null;
@@ -944,6 +949,7 @@ namespace ICSharpCode.NullabilityInference
                                 if (lambdaParamSymbol == null)
                                     throw new InvalidOperationException("Could not find symbol for lambda parameter");
                                 localVarTypes.Add(lambdaParamSymbol, invokeParam);
+                                localVariables.Add(lambdaParamSymbol);
                             }
                         }
                     }

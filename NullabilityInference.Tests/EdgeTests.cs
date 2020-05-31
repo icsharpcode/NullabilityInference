@@ -647,5 +647,19 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void LinqChain()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+class Program {
+    public string Test(string input) {
+        object[] o = { input };
+        return (string)o.TakeWhile(obj => obj != this).FirstOrDefault(obj => obj is string);
+    }
+}"));
+        }
     }
 }

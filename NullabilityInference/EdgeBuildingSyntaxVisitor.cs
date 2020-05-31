@@ -407,5 +407,11 @@ namespace ICSharpCode.NullabilityInference
                 }
             }
         }
+
+        internal bool IsReducedExtensionMethodCall(InvocationExpressionSyntax invocation)
+        {
+            var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
+            return symbolInfo.Symbol is IMethodSymbol { MethodKind: MethodKind.ReducedExtension };
+        }
     }
 }
