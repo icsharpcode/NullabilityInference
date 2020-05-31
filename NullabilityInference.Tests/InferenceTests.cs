@@ -652,5 +652,23 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void QueryExpression()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Linq;
+class Program {
+    public string? Test(string? input) {
+        return (
+            from line in new[] { input }
+            where !(line?.Length > 10)
+            select Identity(line)
+        ).FirstOrDefault();
+    }
+    static string? Identity(string? x) => x;
+}");
+        }
     }
 }

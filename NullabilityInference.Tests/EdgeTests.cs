@@ -649,7 +649,7 @@ class Program {
         }
 
         [Fact]
-        public void LinqChain()
+        public void LinqCallChain()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
 using System;
