@@ -670,5 +670,16 @@ class Program {
     static string? Identity(string? x) => x;
 }");
         }
+
+        [Fact]
+        public void Lock()
+        {
+            AssertNullabilityInference(@"class Program {
+    public void Test(object obj)
+    {
+        lock (obj) { }
+    }
+}");
+        }
     }
 }

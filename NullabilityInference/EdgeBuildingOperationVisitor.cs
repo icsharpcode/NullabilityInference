@@ -167,6 +167,14 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitLock(ILockOperation operation, EdgeBuildingContext argument)
+        {
+            var monitor = operation.LockedValue.Accept(this, argument);
+            Dereference(monitor, operation);
+            operation.Body.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitEmpty(IEmptyOperation operation, EdgeBuildingContext argument)
         {
             return typeSystem.VoidType;
