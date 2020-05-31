@@ -341,16 +341,18 @@ namespace ICSharpCode.NullabilityInference
                 return;
             switch (overrideSymbol, baseSymbol) {
                 case (IMethodSymbol overrideMethod, IMethodSymbol baseMethod):
-                    var overrideType = typeSystem.GetSymbolType(overrideMethod);
-                    var baseType = typeSystem.GetSymbolType(baseMethod);
-                    var edge = typeSystemBuilder.CreateTypeEdge(overrideType, baseType, null, VarianceKind.Out);
+                    var thisType = typeSystem.GetObliviousType(overrideMethod.ContainingType);
+                    var overrideReturnType = typeSystem.GetSymbolType(overrideMethod);
+                    var baseTypeSubstitution = operationVisitor.SubstitutionForMemberAccess(thisType, baseMethod);
+                    var baseReturnType = typeSystem.GetSymbolType(baseMethod.OriginalDefinition);
+                    var edge = typeSystemBuilder.CreateTypeEdge(overrideReturnType, baseReturnType, baseTypeSubstitution, VarianceKind.Out);
                     edge?.SetLabel("override", null);
 
                     foreach (var (overrideParam, baseParam) in overrideMethod.Parameters.Zip(baseMethod.Parameters)) {
-                        overrideType = typeSystem.GetSymbolType(overrideParam);
-                        baseType = typeSystem.GetSymbolType(baseParam);
+                        var overrideParamType = typeSystem.GetSymbolType(overrideParam);
+                        var baseParamType = typeSystem.GetSymbolType(baseParam.OriginalDefinition);
                         var variance = overrideParam.RefKind.ToVariance();
-                        edge = typeSystemBuilder.CreateTypeEdge(overrideType, baseType, null, variance);
+                        edge = typeSystemBuilder.CreateTypeEdge(overrideParamType, baseParamType, baseTypeSubstitution, variance);
                         edge?.SetLabel("override", null);
                     }
 

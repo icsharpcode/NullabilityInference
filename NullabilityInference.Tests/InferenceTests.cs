@@ -620,5 +620,21 @@ class StringBox {
 }
 ");
         }
+
+        [Fact]
+        public void OverrideMethodInGenericClass()
+        {
+            AssertNullabilityInference(@"
+using System;
+abstract class Base<T> {
+    public abstract T Get(string input);
+}
+class Derived : Base<string?> {
+    public override string? Get(string input)
+    {
+        return input.Length == 0 ? null : input;
+    }
+}");
+        }
     }
 }

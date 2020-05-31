@@ -369,7 +369,7 @@ namespace ICSharpCode.NullabilityInference
             return receiverType?.TypeArguments ?? new TypeWithNode[0];
         }
 
-        private TypeSubstitution SubstitutionForMemberAccess(TypeWithNode? receiverType, ISymbol member)
+        internal TypeSubstitution SubstitutionForMemberAccess(TypeWithNode? receiverType, ISymbol member)
         {
             return new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, member), new TypeWithNode[0]);
         }
