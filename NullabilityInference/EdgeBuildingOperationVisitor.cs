@@ -594,6 +594,19 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitTypeParameterObjectCreation(ITypeParameterObjectCreationOperation operation, EdgeBuildingContext argument)
+        {
+            var newObjectType = new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+            var oldObjectCreationType = currentObjectCreationType;
+            try {
+                currentObjectCreationType = newObjectType;
+                operation.Initializer?.Accept(this, argument);
+            } finally {
+                currentObjectCreationType = oldObjectCreationType;
+            }
+            return newObjectType;
+        }
+
         public override TypeWithNode VisitAnonymousObjectCreation(IAnonymousObjectCreationOperation operation, EdgeBuildingContext argument)
         {
             var newObjectType = tsBuilder.CreateTemporaryType(operation.Type);
