@@ -239,9 +239,28 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitUnaryOperator(IUnaryOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.OperatorMethod != null)
-                throw new NotImplementedException("Overloaded operator");
-            operation.Operand.Accept(this, EdgeBuildingContext.Normal);
+            var operand = operation.Operand.Accept(this, EdgeBuildingContext.Normal);
+            if (operation.OperatorMethod != null) {
+                var operatorParams = operation.OperatorMethod.Parameters;
+                var param = typeSystem.GetSymbolType(operatorParams.Single());
+                if (operation.IsLifted) {
+                    if (operand.Type.IsSystemNullable() && !param.Type.IsSystemNullable()) {
+                        operand = operand.TypeArguments.Single();
+                    }
+                }
+                tsBuilder.CreateAssignmentEdge(operand, param);
+                var operatorReturnType = typeSystem.GetSymbolType(operation.OperatorMethod);
+                if (operation.IsLifted) {
+                    if (operatorReturnType.Type?.IsReferenceType == true) {
+                        operatorReturnType = operatorReturnType.WithNode(typeSystem.NullableNode);
+                    } else if (operation.Type.IsSystemNullable() && !operatorReturnType.Type.IsSystemNullable()) {
+                        // wrap in Nullable<T>
+                        operatorReturnType = new TypeWithNode(operation.Type, typeSystem.ObliviousNode, new[] { operatorReturnType });
+                    }
+                }
+
+                return operatorReturnType;
+            }
             return typeSystem.GetObliviousType(operation.Type);
         }
 
