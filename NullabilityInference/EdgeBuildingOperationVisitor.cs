@@ -758,6 +758,9 @@ namespace ICSharpCode.NullabilityInference
                 Debug.Assert(target.Node.NullType == NullType.Oblivious);
             } else if (conv.IsThrow) {
                 // OK, leave target node free-floating
+            } else if (conv.IsNullLiteral) {
+                var edge = tsBuilder.CreateEdge(typeSystem.NullableNode, target.Node);
+                edge?.SetLabel("NullLiteralConversion", operationForLocation.Syntax?.GetLocation());
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }

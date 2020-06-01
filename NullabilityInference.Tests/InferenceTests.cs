@@ -544,6 +544,16 @@ public class SomeContext
         }
 
         [Fact]
+        public void CompareNullableValueTypeToNullDoesNotThrow()
+        {
+            string program = @"
+public class SomeContext {
+    public bool IsNull(int? a) => a != null;
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
+        [Fact]
         public void EventsInInterface()
         {
             AssertNullabilityInference(@"
