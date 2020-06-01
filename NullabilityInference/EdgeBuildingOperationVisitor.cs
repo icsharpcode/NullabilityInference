@@ -393,7 +393,10 @@ namespace ICSharpCode.NullabilityInference
             if (receiverType != null) {
                 receiverType = typeSystem.GetBaseType(receiverType.Value, member.ContainingType.OriginalDefinition);
             }
-            return receiverType?.TypeArguments ?? new TypeWithNode[0];
+            if (receiverType == null) {
+                receiverType = typeSystem.GetObliviousType(member.ContainingType);
+            }
+            return receiverType.Value.TypeArguments;
         }
 
         internal TypeSubstitution SubstitutionForMemberAccess(TypeWithNode? receiverType, ISymbol member)

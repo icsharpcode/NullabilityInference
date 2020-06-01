@@ -718,5 +718,21 @@ class Program {
     }
 }");
         }
+
+
+        [Fact]
+        public void MethodCallInGenericClass()
+        {
+            AssertNullabilityInference(@"
+class DataStructure<T> {
+    class Node {
+        public Node? prev, next;
+    }
+
+    static Node? Sibling(Node n) => n.next;
+
+    Node? Test(Node n) => Sibling(n);
+}");
+        }
     }
 }
