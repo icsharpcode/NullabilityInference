@@ -1,18 +1,22 @@
-# .NET Desktop
-# Build and run tests for .NET Desktop or Windows classic desktop solutions.
-# Add steps that publish symbols, save build artifacts, and more:
-# https://docs.microsoft.com/azure/devops/pipelines/apps/windows/dot-net
-
 trigger:
+- master
+
+pr:
 - master
 
 pool:
   vmImage: 'windows-latest'
-
+  
+strategy:
+  matrix:
+    Config_Release:
+        buildConfiguration: 'Release'
+    Config_Debug:
+        buildConfiguration: 'Debug'
+        
 variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
-  buildConfiguration: 'Release'
 
 steps:
 - task: NuGetToolInstaller@1
@@ -31,3 +35,12 @@ steps:
   inputs:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
+
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)/InferNull/bin/$(buildConfiguration)'
+    includeRootFolder: true
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/InferNull$(buildConfiguration)$(Build.BuildId).zip'
+    replaceExistingArchive: true
+    verbose: true
