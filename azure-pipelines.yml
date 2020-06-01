@@ -36,19 +36,15 @@ steps:
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
-- task: ArchiveFiles@2
-  displayName: Create Zip
+- task: CopyFiles@2
+  displayName: Copy InferNull $(buildConfiguration)
   inputs:
-    rootFolderOrFile: '$(Build.SourcesDirectory)/InferNull/bin/$(buildConfiguration)'
-    includeRootFolder: false
-    archiveType: 'zip'
-    archiveFile: '$(Build.ArtifactStagingDirectory)/InferNull$(buildConfiguration)$(Build.BuildId).zip'
-    replaceExistingArchive: true
-    verbose: true
+    contents: '$(Build.SourcesDirectory)/InferNull/bin/$(buildConfiguration)/**'
+    targetFolder: $(Build.ArtifactStagingDirectory)/$(buildConfiguration)
   condition: succeeded()
-
+  
 - task: PublishPipelineArtifact@1
   displayName: Publish $(buildConfiguration)
   inputs:
-    targetPath: $(Build.ArtifactStagingDirectory)\InferNull$(buildConfiguration)$(Build.BuildId).zip
-    artifactName: drop - $(buildConfiguration)
+    targetPath: $(Build.ArtifactStagingDirectory)/$(buildConfiguration)
+    artifactName: InferNull - $(buildConfiguration) $(Build.BuildId)
