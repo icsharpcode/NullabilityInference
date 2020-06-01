@@ -335,8 +335,12 @@ namespace ICSharpCode.NullabilityInference
         {
             var lhs = operation.Value.Accept(this, argument);
             var rhs = operation.WhenNull.Accept(this, argument);
-            // TODO: handle generics
-            return rhs;
+            var result = tsBuilder.CreateTemporaryType(operation.Type);
+            result.SetName("??");
+            CreateCastEdge(lhs, result, "lhs of ??", operation);
+            tsBuilder.CreateAssignmentEdge(rhs, result);
+            // for the top-level nullability, only the rhs is relevant
+            return result.WithNode(rhs.Node);
         }
 
         public override TypeWithNode VisitThrow(IThrowOperation operation, EdgeBuildingContext argument)
@@ -857,6 +861,10 @@ namespace ICSharpCode.NullabilityInference
                             break;
                     }
                 }
+            } else if (input.Type is IArrayTypeSymbol && target.Type is IArrayTypeSymbol) {
+                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label, operationForLocation);
+            } else if (input.Type is IPointerTypeSymbol && target.Type is IPointerTypeSymbol) {
+                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label, operationForLocation);
             }
         }
 

@@ -254,7 +254,6 @@ class Program {
 }"));
         }
 
-
         [Fact]
         public void NullCoalescingRight()
         {
@@ -266,11 +265,48 @@ class Program {
         }
 
         [Fact]
+        public void NullCoalescingDifferentTypes()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    static object field;
+    public static object Test(string input) => input ?? field;
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingWithThrowExpr()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
 class Program {
     public static string Test(string input) => input ?? throw null;
+}"));
+        }
+
+        [Fact]
+        public void NullCoalescingTypeArgumentLeft()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => (new string[] { input } ?? new string[] { })[0];
+}"));
+        }
+
+        [Fact]
+        public void NullCoalescingTypeArgumentRight()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => (new string[] { } ?? new string[] { input })[0];
+}"));
+        }
+
+        [Fact]
+        public void NullCoalescingTypeArgumentWithThrowExpr()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => (new string[] { input } ?? throw null)[0];
 }"));
         }
 
