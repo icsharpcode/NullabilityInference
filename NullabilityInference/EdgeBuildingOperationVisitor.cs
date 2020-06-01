@@ -774,7 +774,7 @@ namespace ICSharpCode.NullabilityInference
                 if (elementConv.IsNullable)
                     throw new InvalidOperationException("Nullable unwrap failed");
                 CreateConversionEdge(input, target, elementConv, operationForLocation);
-            } else if (conv.IsNumeric || conv.IsConstantExpression) {
+            } else if (conv.IsNumeric || conv.IsConstantExpression || conv.IsEnumeration) {
                 // OK, no edge required
                 Debug.Assert(target.Node.NullType == NullType.Oblivious);
             } else if (conv.IsThrow) {
