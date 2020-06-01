@@ -46,3 +46,9 @@ steps:
     replaceExistingArchive: true
     verbose: true
   condition: succeeded()
+
+- task: PublishPipelineArtifact@1
+  displayName: Publish $(buildConfiguration)
+  inputs:
+    targetPath: $(Build.ArtifactStagingDirectory)\InferNull$(buildConfiguration)$(Build.BuildId).zip
+    artifactName: drop - $(buildConfiguration)
