@@ -341,7 +341,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitThrow(IThrowOperation operation, EdgeBuildingContext argument)
         {
-            var exception = operation.Exception.Accept(this, argument);
+            var exception = operation.Exception?.Accept(this, argument);
             Dereference(exception, operation);
             return typeSystem.VoidType;
         }
