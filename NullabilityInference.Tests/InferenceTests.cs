@@ -760,5 +760,52 @@ class DataStructure<T> {
     public bool IsString(IEnumerable<T>? x) => (x as string) != null;
 }");
         }
+
+        [Fact]
+        public void ObjectInitializer()
+        {
+            AssertNullabilityInference(@"
+struct A {
+    public string S1;
+    public string? S2;
+    public B B;
+}
+struct B {
+    public string S3;
+    public string? S4;
+}
+class Program {
+    public static A Create() {
+        return new A {
+            S1 = string.Empty,
+            S2 = null,
+            B = { 
+                S3 = string.Empty,
+                S4 = null
+            }
+        };
+    }
+}");
+        }
+
+        [Fact]
+        public void ListMemberInitializer()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class A {
+    public List<string?> Elements = new List<string?>();
+}
+class Program {
+    public static A Create() {
+        return new A {
+            Elements = {
+                string.Empty, 
+                null
+            }
+        };
+    }
+}");
+        }
     }
 }

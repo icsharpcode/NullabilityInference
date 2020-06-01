@@ -310,14 +310,14 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitClassDeclaration(ClassDeclarationSyntax node)
         {
             HandleInterfaceImplementations(node);
-            HandleLackOfConstructor(node);
+            HandleLackOfConstructor(node, skipInstanceCtor: false);
             return base.VisitClassDeclaration(node);
         }
 
         public override TypeWithNode VisitStructDeclaration(StructDeclarationSyntax node)
         {
             HandleInterfaceImplementations(node);
-            HandleLackOfConstructor(node);
+            HandleLackOfConstructor(node, skipInstanceCtor: true);
             return base.VisitStructDeclaration(node);
         }
 
@@ -360,7 +360,7 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        private void HandleLackOfConstructor(TypeDeclarationSyntax node)
+        private void HandleLackOfConstructor(TypeDeclarationSyntax node, bool skipInstanceCtor)
         {
             var hasStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
             var hasNonStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && !ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
@@ -368,7 +368,7 @@ namespace ICSharpCode.NullabilityInference
                 // implicit compiler-generated static constructor initializes all static fields to null
                 MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(), location: null);
             }
-            if (!hasNonStaticConstructor) {
+            if (!hasNonStaticConstructor && !skipInstanceCtor) {
                 // implicit compiler-generated constructor initializes all instance fields to null
                 MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(), location: null);
             }

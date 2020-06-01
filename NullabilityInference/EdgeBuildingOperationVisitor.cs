@@ -984,6 +984,21 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitMemberInitializer(IMemberInitializerOperation operation, EdgeBuildingContext argument)
+        {
+            var memberType = operation.InitializedMember.Accept(this, EdgeBuildingContext.LValue);
+            Dereference(memberType, operation);
+            memberType = memberType.WithNode(typeSystem.NonNullNode);
+            var oldObjectCreationType = currentObjectCreationType;
+            try {
+                currentObjectCreationType = memberType;
+                operation.Initializer?.Accept(this, EdgeBuildingContext.Normal);
+            } finally {
+                currentObjectCreationType = oldObjectCreationType;
+            }
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitTuple(ITupleOperation operation, EdgeBuildingContext argument)
         {
             var elementTypes = operation.Elements.Select(e => e.Accept(this, argument)).ToArray();
