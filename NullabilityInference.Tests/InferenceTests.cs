@@ -554,6 +554,19 @@ public class SomeContext {
         }
 
         [Fact]
+        public void LiftedOverloadedOperatorDoesNotThrow()
+        {
+            string program = @"
+public class Program {
+    public MyStruct? Test(MyStruct? x, MyStruct? y) => x + y;
+}
+public struct MyStruct {
+    public static MyStruct operator +(MyStruct a, MyStruct b) => default;
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
+        [Fact]
         public void EventsInInterface()
         {
             AssertNullabilityInference(@"

@@ -193,5 +193,10 @@ namespace ICSharpCode.NullabilityInference
             }
             return type.IsReferenceType;
         }
+
+        public static bool IsSystemNullable(this ITypeSymbol? type)
+        {
+            return type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
+        }
     }
 }

@@ -249,9 +249,28 @@ namespace ICSharpCode.NullabilityInference
             if (operation.OperatorMethod != null) {
                 var operatorParams = operation.OperatorMethod.Parameters;
                 Debug.Assert(operatorParams.Length == 2);
-                tsBuilder.CreateAssignmentEdge(lhs, typeSystem.GetSymbolType(operatorParams[0]));
-                tsBuilder.CreateAssignmentEdge(rhs, typeSystem.GetSymbolType(operatorParams[1]));
-                return typeSystem.GetSymbolType(operation.OperatorMethod);
+                var lhsParam = typeSystem.GetSymbolType(operatorParams[0]);
+                var rhsParam = typeSystem.GetSymbolType(operatorParams[1]);
+                if (operation.IsLifted) {
+                    if (lhs.Type.IsSystemNullable() && !lhsParam.Type.IsSystemNullable()) {
+                        lhs = lhs.TypeArguments.Single();
+                    }
+                    if (rhs.Type.IsSystemNullable() && !rhsParam.Type.IsSystemNullable()) {
+                        rhs = rhs.TypeArguments.Single();
+                    }
+                }
+                tsBuilder.CreateAssignmentEdge(lhs, lhsParam);
+                tsBuilder.CreateAssignmentEdge(rhs, rhsParam);
+                var operatorReturnType = typeSystem.GetSymbolType(operation.OperatorMethod);
+                if (operation.IsLifted) {
+                    if (operatorReturnType.Type?.IsReferenceType == true) {
+                        operatorReturnType = operatorReturnType.WithNode(typeSystem.NullableNode);
+                    } else if (operation.Type.IsSystemNullable() && !operatorReturnType.Type.IsSystemNullable()) {
+                        // wrap in Nullable<T>
+                        operatorReturnType = new TypeWithNode(operation.Type, typeSystem.ObliviousNode, new[] { operatorReturnType });
+                    }
+                }
+                return operatorReturnType;
             }
             if (operation.OperatorKind == BinaryOperatorKind.NotEquals || operation.OperatorKind == BinaryOperatorKind.Equals) {
                 // check for 'Debug.Assert(x != null);'
@@ -743,10 +762,10 @@ namespace ICSharpCode.NullabilityInference
                     CreateConversionEdge(inputElement, targetElement, elementConv, operationForLocation);
                 }
             } else if (conv.IsNullable) {
-                if (input.Type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T) {
+                if (input.Type.IsSystemNullable()) {
                     input = input.TypeArguments.Single();
                 }
-                if (target.Type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T) {
+                if (target.Type.IsSystemNullable()) {
                     target = target.TypeArguments.Single();
                 }
                 var elementConv = typeSystem.Compilation.ClassifyConversion(input.Type!, target.Type!);
