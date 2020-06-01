@@ -423,10 +423,9 @@ namespace ICSharpCode.NullabilityInference
                     Debug.Assert(source.TypeArguments.Count == namedTypeTypeParameters.Count);
                     Debug.Assert(target.TypeArguments.Count == namedTypeTypeParameters.Count);
                     for (int i = 0; i < namedTypeTypeParameters.Count; i++) {
-                        tp = namedTypeTypeParameters[i];
                         var sourceArg = source.TypeArguments[i];
                         var targetArg = target.TypeArguments[i];
-                        var combinedVariance = (variance, tp.Variance).Combine();
+                        var combinedVariance = (variance, namedTypeTypeParameters[i].Variance).Combine();
                         CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
                     }
                 } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {

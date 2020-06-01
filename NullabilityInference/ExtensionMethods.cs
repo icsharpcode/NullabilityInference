@@ -161,14 +161,22 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        public static IEnumerable<ITypeParameterSymbol> FullTypeParameters(this INamedTypeSymbol type)
+        public static IEnumerable<SimpleTypeParameter> FullTypeParameters(this INamedTypeSymbol type)
         {
             if (type.ContainingType != null) {
                 foreach (var inheritedTypeParam in type.ContainingType.FullTypeParameters())
                     yield return inheritedTypeParam;
             }
-            foreach (var tp in type.TypeParameters)
-                yield return tp;
+            if (type.IsAnonymousType) {
+                foreach (var member in type.GetMembers()) {
+                    if (member is IPropertySymbol) {
+                        yield return new SimpleTypeParameter();
+                    }
+                }
+            } else {
+                foreach (var tp in type.TypeParameters)
+                    yield return new SimpleTypeParameter(tp);
+            }
         }
 
         /// <summary>
