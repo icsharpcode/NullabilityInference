@@ -795,6 +795,10 @@ namespace ICSharpCode.NullabilityInference
             } else if (conv.IsNullLiteral) {
                 var edge = tsBuilder.CreateEdge(typeSystem.NullableNode, target.Node);
                 edge?.SetLabel("NullLiteralConversion", operationForLocation.Syntax?.GetLocation());
+            } else if (!conv.Exists) {
+                // Non-existant conversions can occur with "as" syntax; e.g. "IEnumerable<T> as string" compiles
+                // and ends up here despite not having a valid conversion.
+                // Don't create an edge.
             } else {
                 throw new NotImplementedException($"Unknown conversion: {conv}");
             }

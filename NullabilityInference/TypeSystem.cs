@@ -457,7 +457,7 @@ namespace ICSharpCode.NullabilityInference
                     return null;
                 }
                 var edge = new NullabilityEdge(source, target);
-                Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
+                //Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
                 newEdges.Add(edge);
                 return edge;
             }

@@ -734,5 +734,16 @@ class DataStructure<T> {
     Node? Test(Node n) => Sibling(n);
 }");
         }
+
+        [Fact]
+        public void UnusualCasts()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class DataStructure<T> {
+    public bool ThisIsString() => (this as DataStructure<char>) != null;
+    public bool IsString(IEnumerable<T>? x) => (x as string) != null;
+}");
+        }
     }
 }
