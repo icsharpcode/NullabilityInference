@@ -503,7 +503,7 @@ class Program {
         }
 
         [Fact]
-        public void VarianceInMethodGroupCapture()
+        public void MethodGroupCaptureVariantReturn()
         {
             AssertNullabilityInference(@"
 using System;
@@ -511,8 +511,22 @@ using System.Collections.Generic;
 
 class Program
 {
-    public Func<IEnumerable<string?>> VarianceInMethodGroupCapture() => MakeNullList;
+    public Func<IEnumerable<string?>> VarianceInReturnType() => MakeNullList;
     List<string?> MakeNullList() => new List<string?> { null };
+}");
+        }
+
+        [Fact]
+        public void MethodGroupCaptureVariantParameter()
+        {
+            AssertNullabilityInference(@"
+using System;
+
+class Program
+{
+    public Func<string?, bool> VarianceInParameter() => IsNull;
+    bool IsNull(object? o) => o != null;
+    public void Call() => VarianceInParameter()(null);
 }");
         }
 

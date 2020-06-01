@@ -525,7 +525,6 @@ namespace ICSharpCode.NullabilityInference
             foreach (var (methodParam, delegateParam) in operation.Method.Parameters.Zip(delegateParameters)) {
                 var methodParamType = typeSystem.GetSymbolType(methodParam.OriginalDefinition);
                 methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution);
-                var edge = tsBuilder.CreateTypeEdge(delegateParam, methodParamType, substitution, VarianceKind.Out);
                 switch (methodParam.RefKind.ToVariance()) {
                     case VarianceKind.In:
                         CreateCastEdge(delegateParam, methodParamType, "MethodGroup", operation);
