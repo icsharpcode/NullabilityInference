@@ -79,7 +79,7 @@ namespace ICSharpCode.NullabilityInference
             var operation = semanticModel.GetOperation(node, cancellationToken);
             if (operation == null)
                 throw new NotSupportedException($"Could not get operation for {node}");
-            return operation.Accept(operationVisitor, new EdgeBuildingContext());
+            return operation.Accept(operationVisitor, EdgeBuildingContext.Normal);
         }
 
         internal bool IsNonNullFlow(SyntaxNode syntax)

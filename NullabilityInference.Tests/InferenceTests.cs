@@ -568,6 +568,21 @@ public class SomeContext {
         }
 
         [Fact]
+        public void CompoundAssign()
+        {
+            string program = @"
+public class Program {
+    public Program? Test() {
+        Program? p = this;
+        p += 1;
+        return p;
+    }
+    public static Program? operator +(Program? a, int b) => null;
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
+        [Fact]
         public void LiftedOverloadedOperatorDoesNotThrow()
         {
             string program = @"
