@@ -413,12 +413,12 @@ namespace ICSharpCode.NullabilityInference
                 return node;
             }
 
-            internal NullabilityEdge? CreateAssignmentEdge(TypeWithNode source, TypeWithNode target)
+            internal void CreateAssignmentEdge(TypeWithNode source, TypeWithNode target, EdgeLabel label)
             {
-                return CreateTypeEdge(source, target, null, VarianceKind.Out);
+                CreateTypeEdge(source, target, null, VarianceKind.Out, label);
             }
 
-            internal NullabilityEdge? CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance)
+            internal void CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance, EdgeLabel label)
             {
                 if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
                     // If calling `void SomeCall<T>(T x);` as `SomeCall<string>(null)`, then
@@ -431,7 +431,7 @@ namespace ICSharpCode.NullabilityInference
                     //   (target is nullable || substitutedTarget is nullable) implies (source is nullable)
                     // This can be represented by using two edges.
                     if (variance == VarianceKind.In || variance == VarianceKind.None) {
-                        CreateEdge(target.Node, source.Node);
+                        CreateEdge(target.Node, source.Node, label);
                     }
 
                     // Perform the substitution:
@@ -450,23 +450,21 @@ namespace ICSharpCode.NullabilityInference
                         var sourceArg = source.TypeArguments[i];
                         var targetArg = target.TypeArguments[i];
                         var combinedVariance = (variance, namedTypeTypeParameters[i].Variance).Combine();
-                        CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance);
+                        CreateTypeEdge(sourceArg, targetArg, targetSubstitution, combinedVariance, label);
                     }
                 } else if (source.Type is IArrayTypeSymbol || source.Type is IPointerTypeSymbol) {
-                    CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance);
+                    CreateTypeEdge(source.TypeArguments.Single(), target.TypeArguments.Single(), targetSubstitution, variance, label);
                 }
-                NullabilityEdge? edge = null;
                 if (variance == VarianceKind.In || variance == VarianceKind.None)
-                    edge = CreateEdge(target.Node, source.Node);
+                    CreateEdge(target.Node, source.Node, label);
                 if (variance == VarianceKind.Out || variance == VarianceKind.None)
-                    edge = CreateEdge(source.Node, target.Node);
-                return edge;
+                    CreateEdge(source.Node, target.Node, label);
             }
 
             /// <summary>
             /// Creates an edge source->target.
             /// </summary>
-            public NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target)
+            public NullabilityEdge? CreateEdge(NullabilityNode source, NullabilityNode target, EdgeLabel label)
             {
                 // Ignore a bunch of special cases where the edge won't have any effect on the overall result:
                 source = source.ReplacedWith;
@@ -480,7 +478,7 @@ namespace ICSharpCode.NullabilityInference
                 if (target.NullType == NullType.Nullable || target.NullType == NullType.Oblivious) {
                     return null;
                 }
-                var edge = new NullabilityEdge(source, target);
+                var edge = new NullabilityEdge(source, target, label);
                 //Debug.WriteLine($"New edge: {source.Name} -> {target.Name}");
                 newEdges.Add(edge);
                 return edge;

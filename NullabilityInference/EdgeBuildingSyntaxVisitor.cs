@@ -102,8 +102,7 @@ namespace ICSharpCode.NullabilityInference
                         Debug.Assert(ty.FullArity() == typeArgs.Length);
                         foreach (var (tp, ta) in ty.FullTypeParameters().Zip(typeArgs)) {
                             if (tp.HasNotNullConstraint) {
-                                var edge = typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode);
-                                edge?.SetLabel("nonnull constraint", node.GetLocation());
+                                typeSystemBuilder.CreateEdge(ta.Node, typeSystem.NonNullNode, new EdgeLabel("nonnull constraint", node));
                             }
                         }
                     }
@@ -185,7 +184,7 @@ namespace ICSharpCode.NullabilityInference
                     }
                     if (node.Parent is TypeDeclarationSyntax typeSyntax) {
                         bool isStatic = node.Modifiers.Any(SyntaxKind.StaticKeyword);
-                        MarkFieldsAndPropertiesAsNullable(typeSyntax.Members, isStatic, initializedSymbols, node.GetLocation());
+                        MarkFieldsAndPropertiesAsNullable(typeSyntax.Members, isStatic, initializedSymbols, new EdgeLabel("uninit", node));
                     }
                 }
                 return operation.Accept(operationVisitor, new EdgeBuildingContext());
@@ -345,15 +344,13 @@ namespace ICSharpCode.NullabilityInference
                     var overrideReturnType = typeSystem.GetSymbolType(overrideMethod);
                     var baseTypeSubstitution = operationVisitor.SubstitutionForMemberAccess(thisType, baseMethod);
                     var baseReturnType = typeSystem.GetSymbolType(baseMethod.OriginalDefinition);
-                    var edge = typeSystemBuilder.CreateTypeEdge(overrideReturnType, baseReturnType, baseTypeSubstitution, VarianceKind.Out);
-                    edge?.SetLabel("override", null);
+                    typeSystemBuilder.CreateTypeEdge(overrideReturnType, baseReturnType, baseTypeSubstitution, VarianceKind.Out, new EdgeLabel("override"));
 
                     foreach (var (overrideParam, baseParam) in overrideMethod.Parameters.Zip(baseMethod.Parameters)) {
                         var overrideParamType = typeSystem.GetSymbolType(overrideParam);
                         var baseParamType = typeSystem.GetSymbolType(baseParam.OriginalDefinition);
                         var variance = overrideParam.RefKind.ToVariance();
-                        edge = typeSystemBuilder.CreateTypeEdge(overrideParamType, baseParamType, baseTypeSubstitution, variance);
-                        edge?.SetLabel("override", null);
+                        typeSystemBuilder.CreateTypeEdge(overrideParamType, baseParamType, baseTypeSubstitution, variance, new EdgeLabel("override"));
                     }
 
                     break;
@@ -366,15 +363,15 @@ namespace ICSharpCode.NullabilityInference
             var hasNonStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && !ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
             if (!hasStaticConstructor) {
                 // implicit compiler-generated static constructor initializes all static fields to null
-                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(), location: null);
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(), new EdgeLabel("uninit"));
             }
             if (!hasNonStaticConstructor && !skipInstanceCtor) {
                 // implicit compiler-generated constructor initializes all instance fields to null
-                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(), location: null);
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(), new EdgeLabel("uninit"));
             }
         }
 
-        private void MarkFieldsAndPropertiesAsNullable(SyntaxList<MemberDeclarationSyntax> members, bool isStatic, HashSet<ISymbol> initializedMembers, Location? location)
+        private void MarkFieldsAndPropertiesAsNullable(SyntaxList<MemberDeclarationSyntax> members, bool isStatic, HashSet<ISymbol> initializedMembers, EdgeLabel label)
         {
             foreach (var member in members) {
                 if (member.Modifiers.Any(SyntaxKind.StaticKeyword) != isStatic)
@@ -387,8 +384,7 @@ namespace ICSharpCode.NullabilityInference
                     var property = semanticModel.GetDeclaredSymbol(propertyDecl, cancellationToken);
                     if (property != null && !initializedMembers.Contains(property)) {
                         var symbolType = typeSystem.GetSymbolType(property);
-                        var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
-                        edge?.SetLabel("uninit", location);
+                        typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node, label);
                     }
                 }
             }
@@ -400,8 +396,7 @@ namespace ICSharpCode.NullabilityInference
                         var field = semanticModel.GetDeclaredSymbol(v, cancellationToken);
                         if (field != null && !initializedMembers.Contains(field)) {
                             var symbolType = typeSystem.GetSymbolType(field);
-                            var edge = typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node);
-                            edge?.SetLabel("uninit", location);
+                            typeSystemBuilder.CreateEdge(typeSystem.NullableNode, symbolType.Node, label);
                         }
                     }
                 }

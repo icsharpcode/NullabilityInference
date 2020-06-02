@@ -31,9 +31,7 @@ namespace ICSharpCode.NullabilityInference
         public NullabilityNode Source { get; }
         public NullabilityNode Target { get; }
 
-#if DEBUG
-        internal string? Label;
-#endif
+        internal readonly EdgeLabel Label;
         internal int Capacity = 1;
         internal int ReverseCapacity;
         public bool IsError => Source.NullType == NullType.Nullable && Target.NullType == NullType.NonNull;
@@ -42,21 +40,44 @@ namespace ICSharpCode.NullabilityInference
         /// Represents the subtype relation "subType &lt;: superType".
         /// This means that values of type subType can be assigned to variables of type superType.
         /// </summary>
-        public NullabilityEdge(NullabilityNode source, NullabilityNode target)
+        public NullabilityEdge(NullabilityNode source, NullabilityNode target, EdgeLabel label)
         {
             this.Source = source ?? throw new ArgumentNullException(nameof(source));
             this.Target = target ?? throw new ArgumentNullException(nameof(target));
+            this.Label = label;
+        }
+    }
+
+    internal struct EdgeLabel
+    {
+        private readonly string text;
+
+        public EdgeLabel(string text)
+        {
+            this.text = text;
         }
 
-        [Conditional("DEBUG")]
-        internal void SetLabel(string text, Location? location)
+        public EdgeLabel(string text, Location? location)
         {
-#if DEBUG
             if (location == null)
-                this.Label = text;
+                this.text = text;
             else
-                this.Label = text + " at " + location.StartPosToString();
-#endif
+                this.text = text + " at " + location.StartPosToString();
+        }
+
+        internal EdgeLabel(string text, SyntaxNode? syntaxForLocation)
+            : this(text, syntaxForLocation?.GetLocation())
+        {
+        }
+
+        internal EdgeLabel(string text, IOperation? operation)
+            : this(text, operation?.Syntax)
+        {
+        }
+
+        public override string ToString()
+        {
+            return text;
         }
     }
 }

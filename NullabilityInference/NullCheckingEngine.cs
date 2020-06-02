@@ -196,7 +196,7 @@ namespace ICSharpCode.NullabilityInference
             }
             foreach (NullabilityEdge edge in graphEdges) {
                 var gvEdge = new GraphVizEdge(nodeIds[edge.Source], nodeIds[edge.Target]);
-                gvEdge.label = edge.Label;
+                gvEdge.label = edge.Label.ToString();
                 gvEdge.fontsize = 8;
                 if (edge.IsError)
                     gvEdge.color = "red";

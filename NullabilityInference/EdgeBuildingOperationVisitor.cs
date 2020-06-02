@@ -158,7 +158,7 @@ namespace ICSharpCode.NullabilityInference
             Dereference(collection, operation);
             var loopVariable = operation.LoopControlVariable.Accept(this, EdgeBuildingContext.LValue);
 
-            CreateConversionEdge(elementType, loopVariable, loopInfo.ElementConversion, operation);
+            CreateConversionEdge(elementType, loopVariable, loopInfo.ElementConversion, new EdgeLabel("loop variable", operation));
             operation.Body.Accept(this, EdgeBuildingContext.Normal);
             return typeSystem.VoidType;
         }
@@ -209,10 +209,10 @@ namespace ICSharpCode.NullabilityInference
                     }
                     returnType = returnType.TypeArguments.Single();
                 }
-                var edge = tsBuilder.CreateAssignmentEdge(
+                tsBuilder.CreateAssignmentEdge(
                     source: returnVal,
-                    target: returnType);
-                edge?.SetLabel("return", operation.Syntax.GetLocation());
+                    target: returnType,
+                    label: new EdgeLabel("return", operation));
             }
             return typeSystem.VoidType;
         }
@@ -225,13 +225,11 @@ namespace ICSharpCode.NullabilityInference
             mergedType.SetName("?:");
 
             var whenTrue = operation.WhenTrue.Accept(this, argument);
-            var edge = tsBuilder.CreateAssignmentEdge(whenTrue, mergedType);
-            edge?.SetLabel("then", operation.WhenTrue.Syntax?.GetLocation());
+            tsBuilder.CreateAssignmentEdge(whenTrue, mergedType, new EdgeLabel("then", operation.WhenTrue));
 
             if (operation.WhenFalse != null) {
                 var whenFalse = operation.WhenFalse.Accept(this, argument);
-                edge = tsBuilder.CreateAssignmentEdge(whenFalse, mergedType);
-                edge?.SetLabel("else", operation.WhenFalse.Syntax?.GetLocation());
+                tsBuilder.CreateAssignmentEdge(whenFalse, mergedType, new EdgeLabel("else", operation.WhenFalse));
             }
 
             return mergedType;
@@ -248,7 +246,7 @@ namespace ICSharpCode.NullabilityInference
                         operand = operand.TypeArguments.Single();
                     }
                 }
-                tsBuilder.CreateAssignmentEdge(operand, param);
+                tsBuilder.CreateAssignmentEdge(operand, param, new EdgeLabel("unary operand", operation));
                 var operatorReturnType = typeSystem.GetSymbolType(operation.OperatorMethod);
                 if (operation.IsLifted) {
                     if (operatorReturnType.Type?.IsReferenceType == true) {
@@ -304,8 +302,8 @@ namespace ICSharpCode.NullabilityInference
                     rhs = rhs.TypeArguments.Single();
                 }
             }
-            tsBuilder.CreateAssignmentEdge(lhs, lhsParam);
-            tsBuilder.CreateAssignmentEdge(rhs, rhsParam);
+            tsBuilder.CreateAssignmentEdge(lhs, lhsParam, new EdgeLabel("binary lhs", operation));
+            tsBuilder.CreateAssignmentEdge(rhs, rhsParam, new EdgeLabel("binary rhs", operation));
             var operatorReturnType = typeSystem.GetSymbolType(operatorMethod);
             if (isLifted) {
                 if (operatorReturnType.Type?.IsReferenceType == true) {
@@ -343,8 +341,7 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var attr in argument.Parameter.GetAttributes()) {
                     if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
                         if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
-                            var edge = tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode);
-                            edge?.SetLabel("Assert", operation.Syntax?.GetLocation());
+                            tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode, new EdgeLabel("DoesNotReturnIf", operation));
                             break;
                         }
                     }
@@ -358,12 +355,11 @@ namespace ICSharpCode.NullabilityInference
             var rhs = operation.Value.Accept(this, EdgeBuildingContext.Normal);
             if (operation.OperatorMethod != null) {
                 var operatorResult = HandleOverloadedBinaryOperator(operation, lhs, rhs, operation.OperatorMethod, operation.IsLifted);
-                CreateConversionEdge(operatorResult, lhs, operation.GetOutConversion(), operation);
+                CreateConversionEdge(operatorResult, lhs, operation.GetOutConversion(), new EdgeLabel("compound assign", operation));
                 return lhs;
             }
             if (operation.Type.TypeKind == TypeKind.Delegate && operation.OperatorKind == BinaryOperatorKind.Add) {
-                var edge = tsBuilder.CreateAssignmentEdge(rhs.WithNode(typeSystem.ObliviousNode), lhs);
-                edge?.SetLabel("delegate combine", operation.Syntax?.GetLocation());
+                tsBuilder.CreateAssignmentEdge(rhs.WithNode(typeSystem.ObliviousNode), lhs, new EdgeLabel("delegate combine", operation));
                 return lhs;
             } else {
                 return typeSystem.GetObliviousType(operation.Type);
@@ -376,8 +372,8 @@ namespace ICSharpCode.NullabilityInference
             var rhs = operation.WhenNull.Accept(this, EdgeBuildingContext.Normal);
             var result = tsBuilder.CreateTemporaryType(operation.Type);
             result.SetName("??");
-            CreateCastEdge(lhs, result, "lhs of ??", operation);
-            tsBuilder.CreateAssignmentEdge(rhs, result);
+            CreateCastEdge(lhs, result, new EdgeLabel("lhs of ??", operation));
+            tsBuilder.CreateAssignmentEdge(rhs, result, new EdgeLabel("rhs of ??", operation));
             // for the top-level nullability, only the rhs is relevant
             return result.WithNode(rhs.Node);
         }
@@ -426,8 +422,7 @@ namespace ICSharpCode.NullabilityInference
         private void Dereference(TypeWithNode? type, IOperation dereferencingOperation)
         {
             if (type != null) {
-                var edge = tsBuilder.CreateEdge(type.Value.Node, typeSystem.NonNullNode);
-                edge?.SetLabel("Deref", dereferencingOperation.Syntax.GetLocation());
+                tsBuilder.CreateEdge(type.Value.Node, typeSystem.NonNullNode, new EdgeLabel("Deref", dereferencingOperation));
             }
         }
 
@@ -566,6 +561,7 @@ namespace ICSharpCode.NullabilityInference
             // the inferred type arguments.
             methodTypeArgNodes ??= operation.Method.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+            EdgeLabel label = new EdgeLabel($"MethodGroup", operation);
 
             Debug.Assert(operation.Method.Parameters.Length == delegateParameters.Length);
             foreach (var (methodParam, delegateParam) in operation.Method.Parameters.Zip(delegateParameters)) {
@@ -573,13 +569,13 @@ namespace ICSharpCode.NullabilityInference
                 methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution);
                 switch (methodParam.RefKind.ToVariance()) {
                     case VarianceKind.In:
-                        CreateCastEdge(delegateParam, methodParamType, "MethodGroup", operation);
+                        CreateCastEdge(delegateParam, methodParamType,label);
                         break;
                     case VarianceKind.Out:
-                        CreateCastEdge(methodParamType, delegateParam, "MethodGroup", operation);
+                        CreateCastEdge(methodParamType, delegateParam, label);
                         break;
                     case VarianceKind.None:
-                        tsBuilder.CreateTypeEdge(delegateParam, methodParamType, targetSubstitution: null, variance: VarianceKind.None);
+                        tsBuilder.CreateTypeEdge(delegateParam, methodParamType, targetSubstitution: null, variance: VarianceKind.None, label: label);
                         break;
                     default:
                         throw new InvalidOperationException("Invalid variance");
@@ -588,7 +584,7 @@ namespace ICSharpCode.NullabilityInference
 
             var returnType = typeSystem.GetSymbolType(operation.Method.OriginalDefinition);
             returnType = returnType.WithSubstitution(operation.Method.ReturnType, substitution);
-            CreateCastEdge(returnType, delegateReturnType, "MethodGroup", operation);
+            CreateCastEdge(returnType, delegateReturnType, label);
         }
 
         private TypeArgumentListSyntax? FindTypeArgumentList(ExpressionSyntax expr) => expr switch
@@ -609,8 +605,7 @@ namespace ICSharpCode.NullabilityInference
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
                 var variance = (param.RefKind.ToVariance(), VarianceKind.In).Combine();
-                var edge = tsBuilder.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance);
-                edge?.SetLabel("Argument", arg.Syntax?.GetLocation());
+                tsBuilder.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance, new EdgeLabel("Argument", arg));
             }
             return substitution;
         }
@@ -705,8 +700,7 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode elementType = arrayType.TypeArguments.Single();
             foreach (var elementInit in operation.ElementValues) {
                 var initType = elementInit.Accept(this, EdgeBuildingContext.Normal);
-                var edge = tsBuilder.CreateAssignmentEdge(source: initType, target: elementType);
-                edge?.SetLabel("ArrayInit", elementInit.Syntax?.GetLocation());
+                tsBuilder.CreateAssignmentEdge(source: initType, target: elementType, new EdgeLabel("ArrayInit", elementInit));
             }
         }
 
@@ -715,8 +709,7 @@ namespace ICSharpCode.NullabilityInference
             var property = operation.InitializedProperties.Single();
             var propertyType = typeSystem.GetSymbolType(property);
             var value = operation.Value.Accept(this, EdgeBuildingContext.Normal);
-            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: propertyType);
-            edge?.SetLabel("PropertyInit", operation.Syntax?.GetLocation());
+            tsBuilder.CreateAssignmentEdge(source: value, target: propertyType, new EdgeLabel("PropertyInit", operation));
             return typeSystem.VoidType;
         }
 
@@ -731,8 +724,7 @@ namespace ICSharpCode.NullabilityInference
                     fieldType = new TypeWithNode(underlyingType, fieldType.Node);
                 }
             }
-            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: fieldType);
-            edge?.SetLabel("FieldInit", operation.Syntax?.GetLocation());
+            tsBuilder.CreateAssignmentEdge(source: value, target: fieldType, new EdgeLabel("FieldInit", operation));
             return typeSystem.VoidType;
         }
 
@@ -793,31 +785,31 @@ namespace ICSharpCode.NullabilityInference
                 targetType = tsBuilder.CreateTemporaryType(operation.Type);
                 targetType.SetName($"{conv}Conversion");
             }
-            CreateConversionEdge(input, targetType, conv, operation);
+            CreateConversionEdge(input, targetType, conv, new EdgeLabel($"{conv}Conversion", operation));
             return targetType;
         }
 
-        private void CreateConversionEdge(TypeWithNode input, TypeWithNode target, Conversion conv, IOperation operationForLocation)
+        private void CreateConversionEdge(TypeWithNode input, TypeWithNode target, Conversion conv, EdgeLabel label)
         {
             if (conv.IsUserDefined) {
                 var param = conv.MethodSymbol!.Parameters.Single();
                 // TODO: handle operator methods within generic types
                 var paramType = typeSystem.GetSymbolType(param);
-                CreateCastEdge(input, paramType, "UserDefinedInputConversion", operationForLocation);
+                CreateCastEdge(input, paramType, label);
 
                 // use return type of user-defined operator as input for the remaining conversion
                 var returnType = typeSystem.GetSymbolType(conv.MethodSymbol);
-                CreateCastEdge(returnType, target, "UserDefinedOutputConversion", operationForLocation);
+                CreateCastEdge(returnType, target, label);
             } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing) {
-                CreateCastEdge(input, target, $"{conv}Conversion", operationForLocation);
+                CreateCastEdge(input, target, label);
             } else if (conv.IsDefaultLiteral) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, target.Type));
-                tsBuilder.CreateTypeEdge(input, target, null, VarianceKind.None);
+                tsBuilder.CreateTypeEdge(input, target, null, VarianceKind.None, label);
             } else if (conv.IsTupleConversion || conv.IsTupleLiteralConversion) {
                 Debug.Assert(input.TypeArguments.Count == target.TypeArguments.Count);
                 foreach (var (inputElement, targetElement) in input.TypeArguments.Zip(target.TypeArguments)) {
                     var elementConv = typeSystem.Compilation.ClassifyConversion(inputElement.Type!, targetElement.Type!);
-                    CreateConversionEdge(inputElement, targetElement, elementConv, operationForLocation);
+                    CreateConversionEdge(inputElement, targetElement, elementConv, label);
                 }
             } else if (conv.IsNullable) {
                 if (input.Type.IsSystemNullable()) {
@@ -829,15 +821,14 @@ namespace ICSharpCode.NullabilityInference
                 var elementConv = typeSystem.Compilation.ClassifyConversion(input.Type!, target.Type!);
                 if (elementConv.IsNullable)
                     throw new InvalidOperationException("Nullable unwrap failed");
-                CreateConversionEdge(input, target, elementConv, operationForLocation);
+                CreateConversionEdge(input, target, elementConv, label);
             } else if (conv.IsNumeric || conv.IsConstantExpression || conv.IsEnumeration) {
                 // OK, no edge required
                 Debug.Assert(target.Node.NullType == NullType.Oblivious);
             } else if (conv.IsThrow) {
                 // OK, leave target node free-floating
             } else if (conv.IsNullLiteral) {
-                var edge = tsBuilder.CreateEdge(typeSystem.NullableNode, target.Node);
-                edge?.SetLabel("NullLiteralConversion", operationForLocation.Syntax?.GetLocation());
+                tsBuilder.CreateEdge(typeSystem.NullableNode, target.Node, label);
             } else if (!conv.Exists) {
                 // Non-existant conversions can occur with "as" syntax; e.g. "IEnumerable<T> as string" compiles
                 // and ends up here despite not having a valid conversion.
@@ -847,10 +838,9 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        private void CreateCastEdge(TypeWithNode input, TypeWithNode target, string label, IOperation operationForLocation)
+        private void CreateCastEdge(TypeWithNode input, TypeWithNode target, EdgeLabel label)
         {
-            var edge = tsBuilder.CreateEdge(source: input.Node, target: target.Node);
-            edge?.SetLabel(label, operationForLocation.Syntax?.GetLocation());
+            tsBuilder.CreateEdge(source: input.Node, target: target.Node, label: label);
 
             if (input.TypeArguments.Count == 0 && target.TypeArguments.Count == 0) {
                 // If neither type has additional type arguments, we're done here.
@@ -870,13 +860,13 @@ namespace ICSharpCode.NullabilityInference
                 for (int i = 0; i < arity; i++) {
                     switch (namedTargetTypeTypeParameters[i].Variance) {
                         case VarianceKind.None:
-                            tsBuilder.CreateTypeEdge(inputBase.TypeArguments[i], target.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
+                            tsBuilder.CreateTypeEdge(inputBase.TypeArguments[i], target.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None, label: label);
                             break;
                         case VarianceKind.Out:
-                            CreateCastEdge(inputBase.TypeArguments[i], target.TypeArguments[i], label, operationForLocation);
+                            CreateCastEdge(inputBase.TypeArguments[i], target.TypeArguments[i], label);
                             break;
                         case VarianceKind.In:
-                            CreateCastEdge(target.TypeArguments[i], inputBase.TypeArguments[i], label, operationForLocation);
+                            CreateCastEdge(target.TypeArguments[i], inputBase.TypeArguments[i], label);
                             break;
                     }
                 }
@@ -890,20 +880,20 @@ namespace ICSharpCode.NullabilityInference
                 for (int i = 0; i < arity; i++) {
                     switch (namedInputTypeTypeParameters[i].Variance) {
                         case VarianceKind.None:
-                            tsBuilder.CreateTypeEdge(input.TypeArguments[i], targetBase.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None);
+                            tsBuilder.CreateTypeEdge(input.TypeArguments[i], targetBase.TypeArguments[i], targetSubstitution: null, variance: VarianceKind.None, label: label);
                             break;
                         case VarianceKind.Out:
-                            CreateCastEdge(input.TypeArguments[i], targetBase.TypeArguments[i], label, operationForLocation);
+                            CreateCastEdge(input.TypeArguments[i], targetBase.TypeArguments[i], label);
                             break;
                         case VarianceKind.In:
-                            CreateCastEdge(targetBase.TypeArguments[i], input.TypeArguments[i], label, operationForLocation);
+                            CreateCastEdge(targetBase.TypeArguments[i], input.TypeArguments[i], label);
                             break;
                     }
                 }
             } else if (input.Type is IArrayTypeSymbol && target.Type is IArrayTypeSymbol) {
-                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label, operationForLocation);
+                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label);
             } else if (input.Type is IPointerTypeSymbol && target.Type is IPointerTypeSymbol) {
-                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label, operationForLocation);
+                CreateCastEdge(input.TypeArguments.Single(), target.TypeArguments.Single(), label);
             }
         }
 
@@ -931,8 +921,7 @@ namespace ICSharpCode.NullabilityInference
         {
             var target = operation.Target.Accept(this, EdgeBuildingContext.LValue);
             var value = operation.Value.Accept(this, EdgeBuildingContext.Normal);
-            var edge = tsBuilder.CreateAssignmentEdge(source: value, target: target);
-            edge?.SetLabel("Assign", operation.Syntax?.GetLocation());
+            tsBuilder.CreateAssignmentEdge(source: value, target: target, new EdgeLabel("Assign", operation));
             return target;
         }
 
@@ -943,8 +932,7 @@ namespace ICSharpCode.NullabilityInference
             var valueType = operation.HandlerValue.Accept(this, EdgeBuildingContext.Normal);
             // 'event += null;' is always allowed, even if the event isn't nullable
             eventType = eventType.WithNode(typeSystem.NullableNode);
-            var edge = tsBuilder.CreateAssignmentEdge(source: valueType, target: eventType);
-            edge?.SetLabel("EventAssign", operation.Syntax?.GetLocation());
+            tsBuilder.CreateAssignmentEdge(source: valueType, target: eventType, new EdgeLabel("EventAssign", operation));
             return typeSystem.VoidType;
         }
 
@@ -984,8 +972,7 @@ namespace ICSharpCode.NullabilityInference
             var variableType = typeSystem.GetSymbolType(operation.Symbol);
             if (operation.Initializer != null) {
                 var init = operation.Initializer.Accept(this, EdgeBuildingContext.Normal);
-                var edge = tsBuilder.CreateAssignmentEdge(source: init, target: variableType);
-                edge?.SetLabel("VarInit", operation.Syntax?.GetLocation());
+                tsBuilder.CreateAssignmentEdge(source: init, target: variableType, new EdgeLabel("VarInit", operation));
             }
             return variableType;
         }
@@ -1031,7 +1018,7 @@ namespace ICSharpCode.NullabilityInference
             if (lhs.Type?.IsTupleType == true) {
                 Debug.Assert(lhs.TypeArguments.Count == rhs.TypeArguments.Count);
                 foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhs.TypeArguments)) {
-                    tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement);
+                    tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement, new EdgeLabel("DeconstructionAssign", operation));
                 }
                 return rhs;
             } else {
@@ -1098,8 +1085,7 @@ namespace ICSharpCode.NullabilityInference
                                 // e.g. someEvent += delegate(object? sender, EventArgs? e)
                                 // causes a warning that the EventArgs paramter must not be nullable.
                                 // -> use VarianceKind.None.
-                                var edge = tsBuilder.CreateTypeEdge(invokeParam, paramType, null, VarianceKind.None);
-                                edge?.SetLabel("lambda parameter", lambdaParamSyntax.GetLocation());
+                                tsBuilder.CreateTypeEdge(invokeParam, paramType, null, VarianceKind.None, new EdgeLabel("lambda parameter", lambdaParamSyntax));
                             } else {
                                 // Implicitly typed lambda parameter: treat like a `var` variable initialization
                                 var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
