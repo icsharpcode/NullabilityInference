@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -94,19 +95,19 @@ namespace ICSharpCode.NullabilityInference
             switch (symbol.Kind) {
                 case SymbolKind.Method:
                     var method = (IMethodSymbol)symbol;
-                    return FromType(method.ReturnType, method.ReturnNullableAnnotation);
+                    return FromType(method.ReturnType, method.ReturnNullableAnnotation, method.GetReturnTypeAttributes());
                 case SymbolKind.Parameter:
                     var parameter = (IParameterSymbol)symbol;
-                    return FromType(parameter.Type, parameter.NullableAnnotation);
+                    return FromType(parameter.Type, parameter.NullableAnnotation, parameter.GetAttributes());
                 case SymbolKind.Property:
                     var property = (IPropertySymbol)symbol;
-                    return FromType(property.Type, property.NullableAnnotation);
+                    return FromType(property.Type, property.NullableAnnotation, property.GetAttributes());
                 case SymbolKind.Field:
                     var field = (IFieldSymbol)symbol;
-                    return FromType(field.Type, field.NullableAnnotation);
+                    return FromType(field.Type, field.NullableAnnotation, field.GetAttributes());
                 case SymbolKind.Event:
                     var ev = (IEventSymbol)symbol;
-                    return FromType(ev.Type, ev.NullableAnnotation);
+                    return FromType(ev.Type, ev.NullableAnnotation, ev.GetAttributes());
                 default:
                     throw new NotImplementedException($"External symbol: {symbol.Kind}");
             }
@@ -123,7 +124,7 @@ namespace ICSharpCode.NullabilityInference
             return false;
         }
 
-        internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability)
+        internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability, ImmutableArray<AttributeData> attributeData = default)
         {
             var topLevelNode = nullability switch
             {
@@ -131,8 +132,18 @@ namespace ICSharpCode.NullabilityInference
                 NullableAnnotation.NotAnnotated => NonNullNode,
                 _ => ObliviousNode,
             };
+            if (!attributeData.IsDefaultOrEmpty) {
+                foreach (var attr in attributeData) {
+                    switch (attr.AttributeClass?.GetFullName()) {
+                        case "System.Diagnostics.CodeAnalysis.MaybeNullAttribute":
+                        case "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute":
+                            topLevelNode = NullableNode;
+                            break;
+                    }
+                }
+            }
             if (type is INamedTypeSymbol nts) {
-                return new TypeWithNode(nts, topLevelNode, nts.FullTypeArguments().Zip(nts.FullTypeArgumentNullableAnnotations(), FromType).ToArray());
+                return new TypeWithNode(nts, topLevelNode, nts.FullTypeArguments().Zip(nts.FullTypeArgumentNullableAnnotations(), (a, b) => FromType(a, b)).ToArray());
             } else if (type is IArrayTypeSymbol ats) {
                 return new TypeWithNode(ats, topLevelNode, new[] { FromType(ats.ElementType, ats.ElementNullableAnnotation) });
             } else if (type is IPointerTypeSymbol pts) {
@@ -410,6 +421,19 @@ namespace ICSharpCode.NullabilityInference
             internal NullabilityEdge? CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance)
             {
                 if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
+                    // If calling `void SomeCall<T>(T x);` as `SomeCall<string>(null)`, then
+                    // we need either `x: T?` or `T = string?`:
+                    //   (source is nullable) implies (target is nullable || substitutedTarget is nullable)
+                    // We can't represent such a choice in the graph, so we always substitute and prefer `string?`.
+
+                    // However, if the variance causes us to create edges the other way around
+                    // (e.g. an override-edge for `override void SomeCall(string x)`), we have:
+                    //   (target is nullable || substitutedTarget is nullable) implies (source is nullable)
+                    // This can be represented by using two edges.
+                    if (variance == VarianceKind.In || variance == VarianceKind.None) {
+                        CreateEdge(target.Node, source.Node);
+                    }
+
                     // Perform the substitution:
                     target = targetSubstitution.Value[tp.TypeParameterKind, tp.FullOrdinal()];
                     targetSubstitution = null;

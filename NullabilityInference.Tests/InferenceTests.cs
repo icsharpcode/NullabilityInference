@@ -807,5 +807,38 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void GenericOverrideNonNull()
+        {
+            AssertNullabilityInference(@"
+using System;
+public abstract class Base<T> where T : class {
+    public abstract int Test(T x);
+}
+class Derived : Base<string> {
+    public override int Test(string x) => x.Length;
+}
+");
+        }
+
+        [Fact]
+        public void DictTryGetValue()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+class Program {
+    public int Test(Dictionary<string, string> d) {
+        string? val;
+        if (d.TryGetValue(string.Empty, out val)) {
+            return val.Length;
+        } else {
+            return 0;
+        }
+    }
+}
+");
+        }
     }
 }
