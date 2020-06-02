@@ -28,44 +28,38 @@ namespace ICSharpCode.NullabilityInference
     /// </summary>
     internal static class MaximumFlow
     {
-        public static int Compute(IEnumerable<NullabilityNode> allTypes, NullabilityNode source, NullabilityNode sink, CancellationToken cancellationToken)
+        public static int Compute(IEnumerable<NullabilityNode> allNodes, NullabilityNode source, NullabilityNode sink, CancellationToken cancellationToken)
         {
             Debug.Assert(source != sink);
             int maxFlow = 0;
-            int newFlow;
-            ResetVisited(allTypes);
-            while ((newFlow = AddFlow(source, sink, int.MaxValue)) > 0) {
+            ResetVisited(allNodes);
+            while (AddFlow(sink, source)) {
                 cancellationToken.ThrowIfCancellationRequested();
-                maxFlow += newFlow;
-                ResetVisited(allTypes);
+                maxFlow += 1;
+                ResetVisited(allNodes);
             }
             return maxFlow;
         }
 
-        private static int AddFlow(NullabilityNode node, NullabilityNode sink, int maxNewFlow)
+        private static bool AddFlow(NullabilityNode node, NullabilityNode source)
         {
-            if (maxNewFlow == 0 || node.Visited)
-                return 0;
+            if (node.Visited)
+                return false;
             node.Visited = true;
-            if (node == sink)
-                return maxNewFlow;
-            foreach (NullabilityEdge edge in node.OutgoingEdges) {
-                int newFlow = AddFlow(edge.Target, sink, Math.Min(maxNewFlow, edge.Capacity));
-                if (newFlow > 0) {
-                    edge.Capacity -= newFlow;
-                    edge.ReverseCapacity += newFlow;
-                    return newFlow;
+            if (node == source)
+                return true;
+            var predecessors = node.ResidualGraphPredecessors;
+            for (int i = 0; i < predecessors.Count; i++) {
+                var prevNode = predecessors[i];
+                if (AddFlow(prevNode, source)) {
+                    // Remove the edge from the residual graph
+                    predecessors.SwapRemoveAt(i);
+                    // and instead add the reverse edge
+                    prevNode.ResidualGraphPredecessors.Add(node);
+                    return true;
                 }
             }
-            foreach (NullabilityEdge edge in node.IncomingEdges) {
-                int newFlow = AddFlow(edge.Source, sink, Math.Min(maxNewFlow, edge.ReverseCapacity));
-                if (newFlow > 0) {
-                    edge.ReverseCapacity -= newFlow;
-                    edge.Capacity += newFlow;
-                    return newFlow;
-                }
-            }
-            return 0;
+            return false;
         }
 
         private static void ResetVisited(IEnumerable<NullabilityNode> allTypes)

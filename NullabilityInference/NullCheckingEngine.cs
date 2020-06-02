@@ -60,17 +60,23 @@ namespace ICSharpCode.NullabilityInference
 
             MaximumFlow.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
 
-            // Run non-null with ignoreEdgesWithoutCapacity before nullable so that errors
-            // are reported as close to non-null as possible.
-            typeSystem.NonNullNode.NullType = NullType.Infer;
-            InferNonNull(typeSystem.NonNullNode, ignoreEdgesWithoutCapacity: true);
-            typeSystem.NullableNode.NullType = NullType.Infer;
-            InferNullable(typeSystem.NullableNode, ignoreEdgesWithoutCapacity: false);
+            // Infer non-null first using the residual graph.
+            InferNonNullUsingResidualGraph(typeSystem.NonNullNode);
+            // Then use the original graph to infer nullable types everywhere we didn't already infer non-null.
+            // This ends up creating the minimum cut.
+            InferNullable(typeSystem.NullableNode);
+            // Note that for longer chains (null -> A -> B -> C -> nonnull)
+            // this approach ends up cutting the graph as close to nonnull as possible when there's multiple
+            // choices with the same number of warnings. This is why we use the "reverse" residual graph
+            // (ResidualGraphPredecessors) -- using ResidualGraphSuccessors would end up cutting closer to the <null> node.
+
 
             // There's going to be a bunch of remaining nodes where either choice would work.
             // For parameters, prefer marking those as nullable:
             foreach (var paramNode in typeSystem.NodesInInputPositions) {
-                InferNullable(paramNode.ReplacedWith);
+                if (paramNode.ReplacedWith.NullType == NullType.Infer) {
+                    InferNullable(paramNode.ReplacedWith);
+                }
             }
             foreach (var node in typeSystem.AllNodes) {
                 // Finally, anything left over is inferred to be non-null:
@@ -81,6 +87,17 @@ namespace ICSharpCode.NullabilityInference
                         node.NullType = NullType.NonNull;
                 }
                 Debug.Assert(node.NullType == node.ReplacedWith.NullType);
+            }
+        }
+
+        private void InferNonNullUsingResidualGraph(NullabilityNode node)
+        {
+            Debug.Assert(node.NullType == NullType.Infer || node.NullType == NullType.NonNull);
+            node.NullType = NullType.NonNull;
+            foreach (var pred in node.ResidualGraphPredecessors) {
+                if (pred.NullType == NullType.Infer) {
+                    InferNonNullUsingResidualGraph(pred);
+                }
             }
         }
 
@@ -97,28 +114,24 @@ namespace ICSharpCode.NullabilityInference
             });
         }
 
-        private void InferNonNull(NullabilityNode node, bool ignoreEdgesWithoutCapacity = false)
+        private void InferNonNull(NullabilityNode node)
         {
-            if (node.NullType != NullType.Infer) {
-                return;
-            }
+            Debug.Assert(node.NullType == NullType.Infer || node.NullType == NullType.NonNull);
             node.NullType = NullType.NonNull;
             foreach (var edge in node.IncomingEdges) {
-                if (ignoreEdgesWithoutCapacity == false || edge.Capacity > 0) {
-                    InferNonNull(edge.Source, ignoreEdgesWithoutCapacity);
+                if (edge.Source.NullType == NullType.Infer) {
+                    InferNonNull(edge.Source);
                 }
             }
         }
 
-        private void InferNullable(NullabilityNode node, bool ignoreEdgesWithoutCapacity = false)
+        private void InferNullable(NullabilityNode node)
         {
-            if (node.NullType != NullType.Infer) {
-                return;
-            }
+            Debug.Assert(node.NullType == NullType.Infer || node.NullType == NullType.Nullable);
             node.NullType = NullType.Nullable;
             foreach (var edge in node.OutgoingEdges) {
-                if (ignoreEdgesWithoutCapacity == false || edge.Capacity > 0) {
-                    InferNullable(edge.Target, ignoreEdgesWithoutCapacity);
+                if (edge.Target.NullType == NullType.Infer) {
+                    InferNullable(edge.Target);
                 }
             }
         }
@@ -191,7 +204,7 @@ namespace ICSharpCode.NullabilityInference
                 if (node.Location != null) {
                     gvNode.label += $"\n{node.Location.EndPosToString()}";
                 }
-                //gvNode.label += $"\n{node.NullType}";
+                gvNode.label += $"\n{node.NullType}";
                 graph.AddNode(gvNode);
             }
             foreach (NullabilityEdge edge in graphEdges) {
@@ -200,8 +213,6 @@ namespace ICSharpCode.NullabilityInference
                 gvEdge.fontsize = 8;
                 if (edge.IsError)
                     gvEdge.color = "red";
-                else if (edge.Capacity == 0)
-                    gvEdge.color = "yellow";
                 graph.AddEdge(gvEdge);
             }
             return graph;

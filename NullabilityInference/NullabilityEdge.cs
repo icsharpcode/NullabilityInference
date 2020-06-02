@@ -24,6 +24,9 @@ namespace ICSharpCode.NullabilityInference
 {
     /// <summary>
     /// An edge in the graph of nullability nodes.
+    /// 
+    /// An edge represents the constraint "if source is nullable, then target is nullable"
+    /// (source is assignable to target).
     /// </summary>
     [DebuggerDisplay("{Source} -> {Target}")]
     internal sealed class NullabilityEdge
@@ -32,8 +35,6 @@ namespace ICSharpCode.NullabilityInference
         public NullabilityNode Target { get; }
 
         internal readonly EdgeLabel Label;
-        internal int Capacity = 1;
-        internal int ReverseCapacity;
         public bool IsError => Source.NullType == NullType.Nullable && Target.NullType == NullType.NonNull;
 
         /// <summary>

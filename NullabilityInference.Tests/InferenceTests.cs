@@ -840,5 +840,19 @@ class Program {
 }
 ");
         }
+
+        [Fact]
+        public void WarningCloseToDeref()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public static int Main() {
+        string? n = null;
+        string? a = n;
+        string? b = a;
+        return b.Length;
+    }
+}");
+        }
     }
 }

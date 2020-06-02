@@ -380,6 +380,7 @@ namespace ICSharpCode.NullabilityInference
                     Debug.Assert(edge.Target.ReplacedWith == edge.Target);
                     edge.Source.OutgoingEdges.Add(edge);
                     edge.Target.IncomingEdges.Add(edge);
+                    edge.Target.ResidualGraphPredecessors.Add(edge.Source);
                 }
                 newEdges.Clear();
             }

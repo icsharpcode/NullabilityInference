@@ -206,5 +206,16 @@ namespace ICSharpCode.NullabilityInference
         {
             return type?.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T;
         }
+
+        /// <summary>
+        /// Remove item at index <c>index</c> in O(1) by swapping it with the last element in the collection before removing it.
+        /// Useful when the order of elements in the list is not relevant.
+        /// </summary>
+        public static void SwapRemoveAt<T>(this List<T> list, int index)
+        {
+            int removeIndex = list.Count - 1;
+            list[index] = list[removeIndex];
+            list.RemoveAt(removeIndex);
+        }
     }
 }

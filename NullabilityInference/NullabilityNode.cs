@@ -44,6 +44,15 @@ namespace ICSharpCode.NullabilityInference
         public IEnumerable<NullabilityNode> Successors => OutgoingEdges.Select(e => e.Target);
 
         /// <summary>
+        /// Predecessors in the residual graph. This starts out the same as <c>Predecessors</c>, but gets mutated by the maximum flow algorithm:
+        /// Any edge involved in the maximum flow will be reversed. Thus there will be no path from {null} to {nonnull} left over in the residual graph.
+        /// 
+        /// Because we store only predecessors, this means a depth first search starting at {nonnull} using this list will visit all nodes
+        /// on the {nonnull} half of the graph after performing the minimum cut.
+        /// </summary>
+        internal List<NullabilityNode> ResidualGraphPredecessors = new List<NullabilityNode>();
+
+        /// <summary>
         /// Name for the DOT graph.
         /// </summary>
         public abstract string Name { get; }
