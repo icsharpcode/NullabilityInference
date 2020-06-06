@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -129,6 +130,14 @@ namespace ICSharpCode.NullabilityInference
                 // Ignore existing nullable reference types; we'll infer them again from scratch.
                 return ty;
             }
+        }
+
+        public override TypeWithNode VisitPointerType(PointerTypeSyntax node)
+        {
+            var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
+            Debug.Assert(typeInfo.Type is IPointerTypeSymbol);
+            var elementType = node.ElementType.Accept(this);
+            return new TypeWithNode(typeInfo.Type, typeSystem.ObliviousNode, new[] { elementType });
         }
 
         /// <summary>
