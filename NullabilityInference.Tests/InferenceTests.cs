@@ -893,5 +893,16 @@ class Program {
     }
 }");
         }
+
+
+        [Fact]
+        public void TypeOfUnbound()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+	public Type SomeType() => typeof(Func<>);
+}");
+        }
     }
 }

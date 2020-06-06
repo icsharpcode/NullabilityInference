@@ -145,6 +145,12 @@ namespace ICSharpCode.NullabilityInference
             return node.Type.Accept(this);
         }
 
+        public override TypeWithNode VisitOmittedTypeArgument(OmittedTypeArgumentSyntax node)
+        {
+            // e.g. in `typeof(List<>)`
+            return typeSystem.VoidType;
+        }
+
         /// <summary>
         /// Gets whether it is syntactically possible to add a `NullableTypeSyntax` around the given node.
         /// </summary>
