@@ -60,7 +60,7 @@ namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
         protected static (CSharpCompilation, NullCheckingEngine) CompileAndAnalyze(string program, CancellationToken cancellationToken = default)
         {
             var syntaxTree = SyntaxFactory.ParseSyntaxTree(program, new CSharpParseOptions(LanguageVersion.CSharp8), cancellationToken: cancellationToken);
-            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
+            var options = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, allowUnsafe: true);
             var compilation = CSharpCompilation.Create("test", new[] { syntaxTree }, defaultReferences.Value, options);
             compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
             string allNullableText = compilation.SyntaxTrees.Single().GetText().ToString();

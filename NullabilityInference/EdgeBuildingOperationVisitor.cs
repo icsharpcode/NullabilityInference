@@ -58,6 +58,23 @@ namespace ICSharpCode.NullabilityInference
         {
             TypeWithNode result = operation.Accept(this, argument);
             if (result.Node == null) {
+                // This happens with a "NoneOperation", because VisitNoneOperation() in the base class
+                // returns default(TResult). Unfortunately that method is internal so we can't override it,
+                // and instead have to handle it as a special case here.
+                if (operation.Syntax?.Parent?.Kind() == SyntaxKind.PointerMemberAccessExpression
+                    || operation.Syntax?.Kind() == SyntaxKind.PointerIndirectionExpression
+                    || operation.Syntax?.Kind() == SyntaxKind.ElementAccessExpression)
+                {
+                    // https://github.com/dotnet/roslyn/issues/19960
+                    var pointerOperation = operation.Children.First();
+                    Debug.Assert(pointerOperation.Type.TypeKind == TypeKind.Pointer);
+                    var pointerType = Visit(pointerOperation, EdgeBuildingContext.Normal);
+                    foreach (var child in operation.Children.Skip(1)) {
+                        // e.g. index for ElementAccessExpression
+                        child.Accept(this, EdgeBuildingContext.Normal);
+                    }
+                    return pointerType.TypeArguments.Single();
+                }
                 throw new NotSupportedException($"Unexpected null pointer in result.Node from {operation} at {operation.Syntax?.GetLocation().StartPosToString()}.");
             }
             return result;

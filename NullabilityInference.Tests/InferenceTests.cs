@@ -869,5 +869,29 @@ class Derived : Base {
 	public override void Test<T>(T a) { }
 }");
         }
+
+        [Fact]
+        public void Pointers()
+        {
+            AssertNullabilityInference(@"
+using System;
+struct Box<T> {
+    public void Set(T a) {}
+}
+class Program {
+    public unsafe void Test1(Box<string>* a, Box<string?>* b) {
+        a->Set(string.Empty);
+        b->Set(null);
+    }
+    public unsafe void Test2(Box<string>* a, Box<string?>* b) {
+        (*a).Set(string.Empty);
+        (*b).Set(null);
+    }
+    public unsafe void Test3(Box<string>* a, Box<string?>* b) {
+        a[0].Set(string.Empty);
+        b[0].Set(null);
+    }
+}");
+        }
     }
 }
