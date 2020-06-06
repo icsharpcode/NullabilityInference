@@ -439,7 +439,17 @@ namespace ICSharpCode.NullabilityInference
 
         internal TypeSubstitution SubstitutionForMemberAccess(TypeWithNode? receiverType, ISymbol member)
         {
-            return new TypeSubstitution(ClassTypeArgumentsForMemberAccess(receiverType, member), new TypeWithNode[0]);
+            var classTypeArguments = ClassTypeArgumentsForMemberAccess(receiverType, member);
+            TypeWithNode[] methodTypeArguments;
+            if (member is IMethodSymbol method && method.Arity > 0) {
+                methodTypeArguments = new TypeWithNode[method.Arity];
+                for (int i = 0; i < methodTypeArguments.Length; i++) {
+                    methodTypeArguments[i] = typeSystem.GetObliviousType(method.TypeArguments[i]);
+                }
+            } else {
+                methodTypeArguments = new TypeWithNode[0];
+            }
+            return new TypeSubstitution(classTypeArguments, methodTypeArguments);
         }
 
         public override TypeWithNode VisitFieldReference(IFieldReferenceOperation operation, EdgeBuildingContext argument)

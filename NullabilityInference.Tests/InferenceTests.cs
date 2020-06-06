@@ -854,5 +854,20 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void InheritedConstraint()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Base {
+	public virtual void Test<T>(T a) where T : class, IDisposable {
+        a.Dispose();
+    }
+}
+class Derived : Base {
+	public override void Test<T>(T a) { }
+}");
+        }
     }
 }

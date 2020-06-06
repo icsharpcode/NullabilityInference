@@ -197,7 +197,16 @@ namespace ICSharpCode.NullabilityInference
                 // Type parameters can be reference types without having the ": class" constraint,
                 // e.g. when there's a "T : BaseClass" constraint.
                 // However the "T?" syntax requires an actual "T:class" constraint.
-                return tp.HasReferenceTypeConstraint;
+                if (!tp.HasReferenceTypeConstraint)
+                    return false;
+                // Moreover, this constraint must be syntactic, it is not sufficient if inherited from
+                // an overridden method.
+                if (tp.TypeParameterKind == TypeParameterKind.Method) {
+                    var method = (IMethodSymbol)tp.ContainingSymbol;
+                    if (method.IsOverride)
+                        return false;
+                }
+                return true;
             }
             return type.IsReferenceType;
         }
