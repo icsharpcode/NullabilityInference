@@ -894,6 +894,23 @@ class Program {
 }");
         }
 
+        [Fact]
+        public void PropertyWithNullCheck()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+	string name = string.Empty;
+	public string Name {
+		get { return this.name; }
+		set {
+			if (value == null)
+				throw new ArgumentNullException(nameof(value));
+			this.name = value;
+		}
+	}
+}");
+        }
 
         [Fact]
         public void TypeOfUnbound()
