@@ -246,6 +246,16 @@ static class Program {
         }
 
         [Fact]
+        public void CallViaRefReturn()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) => Identity(ref input);
+    public static ref string Identity(ref string input) => ref input;
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"

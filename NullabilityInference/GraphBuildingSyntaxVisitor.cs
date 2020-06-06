@@ -140,6 +140,11 @@ namespace ICSharpCode.NullabilityInference
             return new TypeWithNode(typeInfo.Type, typeSystem.ObliviousNode, new[] { elementType });
         }
 
+        public override TypeWithNode VisitRefType(RefTypeSyntax node)
+        {
+            return node.Type.Accept(this);
+        }
+
         /// <summary>
         /// Gets whether it is syntactically possible to add a `NullableTypeSyntax` around the given node.
         /// </summary>
