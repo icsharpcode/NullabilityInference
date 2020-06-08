@@ -595,6 +595,35 @@ public struct MyStruct {
             AssertNullabilityInference(expectedProgram: program, inputProgram: program);
         }
 
+
+        [Fact]
+        public void ConditionalAccessOnNullableValueTypeDoesNotThrow()
+        {
+            string program = @"
+public class Program {
+    public string? Test(MyStruct? x) => x?.GetText();
+}
+public struct MyStruct {
+    public string GetText() => string.Empty;
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
+
+        [Fact]
+        public void ConditionalAccessExtensionMethodOnNullableValueTypeDoesNotThrow()
+        {
+            string program = @"
+public class Program {
+    public string? Test(MyStruct? x) => x?.GetText();
+}
+public struct MyStruct { }
+public static class MyExtensions {
+    public static string GetText(this MyStruct m) => string.Empty;
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
         [Fact]
         public void EventsInInterface()
         {
