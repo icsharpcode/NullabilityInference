@@ -1080,5 +1080,26 @@ public class MyList : IEnumerable<string?>, IEnumerable<(string, string?)> {
             AssertNullabilityInference(expectedProgram: program, inputProgram: program);
         }
 
+        [Fact]
+        public void WhereImpl()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+class Program {
+	public static IEnumerable<T> Where<T>(IEnumerable<T> input, Predicate<T> filter) where T : class {
+		foreach (var member in input) {
+			if (filter(member))
+				yield return member;
+		}
+    }
+
+    static void Test() {
+        string[] arr = { string.Empty };
+        foreach (string a in Where(arr, s => s.Length > 0)) {
+        }
+    }
+}");
+        }
     }
 }

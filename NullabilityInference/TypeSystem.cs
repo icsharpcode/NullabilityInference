@@ -407,6 +407,8 @@ namespace ICSharpCode.NullabilityInference
                     return new TypeWithNode(ats, CreateTemporaryNode(), new[] { CreateTemporaryType(ats.ElementType) });
                 } else if (type is IPointerTypeSymbol pts) {
                     return new TypeWithNode(pts, CreateTemporaryNode(), new[] { CreateTemporaryType(pts.PointedAtType) });
+                } else if (type is ITypeParameterSymbol tp && tp.CanBeMadeNullable()) {
+                    return new TypeWithNode(tp, CreateTemporaryNode());
                 }
                 return new TypeWithNode(type, ObliviousNode);
             }

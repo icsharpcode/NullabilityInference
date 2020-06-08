@@ -199,6 +199,10 @@ namespace ICSharpCode.NullabilityInference
                 // However the "T?" syntax requires an actual "T:class" constraint.
                 if (!tp.HasReferenceTypeConstraint)
                     return false;
+                if (tp.ReferenceTypeConstraintNullableAnnotation == NullableAnnotation.Annotated) {
+                    // we can't use "T?" if T itself might already be a nullable reference type
+                    return false;
+                }
                 // Moreover, this constraint must be syntactic, it is not sufficient if inherited from
                 // an overridden method.
                 if (tp.TypeParameterKind == TypeParameterKind.Method) {
