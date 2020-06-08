@@ -721,5 +721,26 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void PropertyPattern()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Linq;
+class Box {
+    public string Value { get; }
+    public Box(string val) { this.Value = val; }
+}
+class Program {
+    public string Test(string input) {
+        object obj = new Box(input);
+        if (obj is Box { Value: var x })
+            return x;
+        else
+            return string.Empty;
+    }
+}"));
+        }
     }
 }

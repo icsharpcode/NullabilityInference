@@ -63,8 +63,7 @@ namespace ICSharpCode.NullabilityInference
                 // and instead have to handle it as a special case here.
                 if (operation.Syntax?.Parent?.Kind() == SyntaxKind.PointerMemberAccessExpression
                     || operation.Syntax?.Kind() == SyntaxKind.PointerIndirectionExpression
-                    || operation.Syntax?.Kind() == SyntaxKind.ElementAccessExpression)
-                {
+                    || operation.Syntax?.Kind() == SyntaxKind.ElementAccessExpression) {
                     // https://github.com/dotnet/roslyn/issues/19960
                     var pointerOperation = operation.Children.First();
                     Debug.Assert(pointerOperation.Type.TypeKind == TypeKind.Pointer);
@@ -442,6 +441,8 @@ namespace ICSharpCode.NullabilityInference
                     return typeSystem.GetObliviousType(operation.Type).WithNode(typeSystem.NonNullNode);
                 case InstanceReferenceKind.ImplicitReceiver:
                     return currentObjectCreationType;
+                case InstanceReferenceKind.PatternInput:
+                    return currentPatternInput;
                 default:
                     throw new NotImplementedException(operation.ReferenceKind.ToString());
             }
@@ -603,7 +604,7 @@ namespace ICSharpCode.NullabilityInference
                 methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution);
                 switch (methodParam.RefKind.ToVariance()) {
                     case VarianceKind.In:
-                        CreateCastEdge(delegateParam, methodParamType,label);
+                        CreateCastEdge(delegateParam, methodParamType, label);
                         break;
                     case VarianceKind.Out:
                         CreateCastEdge(methodParamType, delegateParam, label);
@@ -1151,6 +1152,67 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitTranslatedQuery(ITranslatedQueryOperation operation, EdgeBuildingContext argument)
         {
             return Visit(operation.Operation, argument);
+        }
+
+        public override TypeWithNode VisitIsPattern(IIsPatternOperation operation, EdgeBuildingContext argument)
+        {
+            var value = Visit(operation.Value, EdgeBuildingContext.Normal);
+            var pattern = Visit(operation.Pattern, EdgeBuildingContext.Normal);
+            PerformPatternMatch(value, pattern, operation);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        private void PerformPatternMatch(TypeWithNode value, TypeWithNode pattern, IOperation operation)
+        {
+            CreateCastEdge(value, pattern, new EdgeLabel("match", operation));
+        }
+
+        public override TypeWithNode VisitDeclarationPattern(IDeclarationPatternOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.DeclaredSymbol != null) {
+                var symbolType = typeSystem.GetSymbolType(operation.DeclaredSymbol);
+                if (!operation.MatchesNull) {
+                    symbolType = symbolType.WithNode(typeSystem.ObliviousNode);
+                }
+                return symbolType;
+            } else {
+                return typeSystem.GetObliviousType(operation.Type);
+            }
+        }
+
+        private TypeWithNode currentPatternInput;
+
+        public override TypeWithNode VisitRecursivePattern(IRecursivePatternOperation operation, EdgeBuildingContext argument)
+        {
+            var outerPatternInput = currentPatternInput;
+            try {
+                if (operation.Syntax is RecursivePatternSyntax { Type: { } typeSyntax }) {
+                    currentPatternInput = typeSyntax.Accept(syntaxVisitor);
+                } else {
+                    currentPatternInput = tsBuilder.CreateTemporaryType(operation.Type);
+                    currentPatternInput.SetName("RecursivePattern");
+                }
+                // Recursive pattern never matches null, so ignore the top-level nullability.
+                currentPatternInput = currentPatternInput.WithNode(typeSystem.ObliviousNode);
+                foreach (var child in operation.Children)
+                    child.Accept(this, EdgeBuildingContext.Normal);
+                return currentPatternInput;
+            } finally {
+                currentPatternInput = outerPatternInput;
+            }
+        }
+
+        public override TypeWithNode VisitPropertySubpattern(IPropertySubpatternOperation operation, EdgeBuildingContext argument)
+        {
+            var value = Visit(operation.Member, EdgeBuildingContext.Normal);
+            var pattern = Visit(operation.Pattern, EdgeBuildingContext.Normal);
+            PerformPatternMatch(value, pattern, operation);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitConstantPattern(IConstantPatternOperation operation, EdgeBuildingContext argument)
+        {
+            return typeSystem.GetObliviousType(operation.Type);
         }
     }
 }

@@ -171,6 +171,46 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitDeclarationPattern(DeclarationPatternSyntax node)
+        {
+            if (node.Type is SimpleNameSyntax { IsVar: true }) {
+                node.Designation.Accept(this);
+            } else {
+                var type = node.Type.Accept(this);
+                if (node.Designation is SingleVariableDesignationSyntax svds) {
+                    var symbol = semanticModel.GetDeclaredSymbol(svds, cancellationToken);
+                    if (symbol != null) {
+                        typeSystem.AddSymbolType(symbol, type);
+                    }
+                } else {
+                    throw new NotImplementedException($"DeclarationPattern with explicit type unsupported designation: {node.Designation} near {node.GetLocation().StartPosToString()}");
+                }
+            }
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitRecursivePattern(RecursivePatternSyntax node)
+        {
+            if (node.Type != null) {
+                if (node.Type is SimpleNameSyntax { IsVar: true }) {
+                    node.Designation?.Accept(this);
+                } else {
+                    var type = node.Type.Accept(this);
+                    if (node.Designation is SingleVariableDesignationSyntax svds) {
+                        var symbol = semanticModel.GetDeclaredSymbol(svds, cancellationToken);
+                        if (symbol != null) {
+                            typeSystem.AddSymbolType(symbol, type);
+                        }
+                    } else if (node.Designation != null) {
+                        throw new NotImplementedException($"DeclarationPattern with explicit type unsupported designation: {node.Designation} near {node.GetLocation().StartPosToString()}");
+                    }
+                }
+            }
+            node.PositionalPatternClause?.Accept(this);
+            node.PropertyPatternClause?.Accept(this);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitSingleVariableDesignation(SingleVariableDesignationSyntax node)
         {
             var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);

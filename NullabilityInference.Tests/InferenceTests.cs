@@ -921,5 +921,98 @@ class Program {
 	public Type SomeType() => typeof(Func<>);
 }");
         }
+
+        [Fact]
+        public void IsExpression1()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Program {
+    public static bool Test(object? input) {
+        return input is Program;
+    }
+}");
+        }
+
+        [Fact]
+        public void IsPattern1()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Program {
+    public static bool Test(object? input) {
+        return input is {};
+    }
+}");
+        }
+
+        [Fact]
+        public void IsPattern2()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class Program {
+    public static bool Test(object? input) {
+        return input is Program p && p.ToString() == ""Program"";
+    }
+ }");
+        }
+
+        [Fact]
+        public void IsPattern3()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+	public string Test(object? x) => x is string s ? s : string.Empty;
+}");
+        }
+
+        [Fact]
+        public void IsPattern4()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+class Program {
+	public void Test(object? x) {
+        if (x is List<string?> s1) s1.Add(null);
+        if (x is List<string> s2) s2.Add(string.Empty);
+    }
+}");
+        }
+
+        [Fact]
+        public void IsPattern5()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+class Program {
+	public void Test(object? x) {
+        if (x is List<string?> { Count: 0 } s1) s1.Add(null);
+        if (x is List<string> { Count: 2 } s2) s2.Add(string.Empty);
+    }
+}");
+        }
+
+        [Fact]
+        public void IsPattern6()
+        {
+            AssertNullabilityInference(@"
+using System;
+using System.Collections.Generic;
+class Box<T> {
+    public T Value { get; set; } 
+    public Box(T val) { Value = val; }
+}
+class Program {
+	public int Test(object? x) {
+        if (x is Box<string> { Value: var b })
+            return b.Length;
+        return 0;
+    }
+}");
+        }
     }
 }
