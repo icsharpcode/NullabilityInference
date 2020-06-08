@@ -601,10 +601,10 @@ public struct MyStruct {
         {
             string program = @"
 public class Program {
-    public string? Test(MyStruct? x) => x?.GetText();
+    public int? Test(MyStruct? x) => x?.GetLength();
 }
 public struct MyStruct {
-    public string GetText() => string.Empty;
+    public int GetLength() => 0;
 }";
             AssertNullabilityInference(expectedProgram: program, inputProgram: program);
         }

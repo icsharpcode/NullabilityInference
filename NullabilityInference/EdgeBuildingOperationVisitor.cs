@@ -975,11 +975,18 @@ namespace ICSharpCode.NullabilityInference
                 var target = Visit(operation.Operation, EdgeBuildingContext.Normal);
                 if (target.Type.IsSystemNullable()) {
                     conditionalAccessInstance = target.TypeArguments.Single();
-                } else { 
+                } else {
                     conditionalAccessInstance = target.WithNode(typeSystem.NonNullNode);
                 }
                 var value = Visit(operation.WhenNotNull, argument);
-                return value.WithNode(typeSystem.NullableNode);
+                if (operation.Type.IsSystemNullable()) {
+                    if (value.Type.IsSystemNullable())
+                        return value;
+                    else
+                        return new TypeWithNode(operation.Type, typeSystem.NullableNode, new[] { value });
+                } else {
+                    return value.WithNode(typeSystem.NullableNode);
+                }
             } finally {
                 conditionalAccessInstance = oldConditionalAccessInstance;
             }
