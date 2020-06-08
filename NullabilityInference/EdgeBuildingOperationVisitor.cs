@@ -890,7 +890,7 @@ namespace ICSharpCode.NullabilityInference
                 // use return type of user-defined operator as input for the remaining conversion
                 var returnType = typeSystem.GetSymbolType(conv.MethodSymbol);
                 CreateCastEdge(returnType, target, label);
-            } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing) {
+            } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing || conv.IsPointer) {
                 CreateCastEdge(input, target, label);
             } else if (conv.IsDefaultLiteral) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, target.Type));
@@ -924,7 +924,7 @@ namespace ICSharpCode.NullabilityInference
                 // and ends up here despite not having a valid conversion.
                 // Don't create an edge.
             } else {
-                throw new NotImplementedException($"Unknown conversion: {conv}");
+                throw new NotImplementedException($"Unknown conversion: {conv}, label={label}");
             }
         }
 
