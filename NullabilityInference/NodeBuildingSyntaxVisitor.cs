@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
+using System.Net.Security;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -182,6 +183,8 @@ namespace ICSharpCode.NullabilityInference
                     if (symbol != null) {
                         typeSystem.AddSymbolType(symbol, type);
                     }
+                } else if (node.Designation is DiscardDesignationSyntax) {
+                    // OK
                 } else {
                     throw new NotImplementedException($"DeclarationPattern with explicit type unsupported designation: {node.Designation} near {node.GetLocation().StartPosToString()}");
                 }
@@ -201,6 +204,8 @@ namespace ICSharpCode.NullabilityInference
                         if (symbol != null) {
                             typeSystem.AddSymbolType(symbol, type);
                         }
+                    } else if (node.Designation is DiscardDesignationSyntax) {
+                        // OK
                     } else if (node.Designation != null) {
                         throw new NotImplementedException($"DeclarationPattern with explicit type unsupported designation: {node.Designation} near {node.GetLocation().StartPosToString()}");
                     }

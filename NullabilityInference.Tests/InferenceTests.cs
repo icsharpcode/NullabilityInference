@@ -1014,5 +1014,17 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void StringInterpolation()
+        {
+            AssertNullabilityInference(@"
+using System;
+class Program {
+	public string Test(object? x, string y) {
+        return $""{x}: {y.Length}"";
+    }
+}");
+        }
     }
 }

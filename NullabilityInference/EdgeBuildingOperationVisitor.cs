@@ -783,6 +783,26 @@ namespace ICSharpCode.NullabilityInference
             return type;
         }
 
+        public override TypeWithNode VisitInterpolatedString(IInterpolatedStringOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, EdgeBuildingContext.Normal);
+            return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
+        }
+
+        public override TypeWithNode VisitInterpolatedStringText(IInterpolatedStringTextOperation operation, EdgeBuildingContext argument)
+        {
+            return Visit(operation.Text, argument);
+        }
+
+        public override TypeWithNode VisitInterpolation(IInterpolationOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children) {
+                child.Accept(this, EdgeBuildingContext.Normal);
+            }
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
         public override TypeWithNode VisitNameOf(INameOfOperation operation, EdgeBuildingContext argument)
         {
             return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
