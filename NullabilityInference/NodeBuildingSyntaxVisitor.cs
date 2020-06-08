@@ -324,6 +324,25 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitLocalFunctionStatement(LocalFunctionStatementSyntax node)
+        {
+            var outerMember = currentMember;
+            try {
+                currentMember = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+                var returnType = node.ReturnType.Accept(this);
+                if (currentMember != null) {
+                    typeSystem.AddSymbolType(currentMember, returnType);
+                }
+                foreach (var child in node.ChildNodes()) {
+                    if (child != node.ReturnType)
+                        Visit(child);
+                }
+                return typeSystem.VoidType;
+            } finally {
+                currentMember = outerMember;
+            }
+        }
+
         public override TypeWithNode VisitDelegateDeclaration(DelegateDeclarationSyntax node)
         {
             node.TypeParameterList?.Accept(this);

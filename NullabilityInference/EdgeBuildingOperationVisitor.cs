@@ -24,6 +24,7 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.FlowAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
 namespace ICSharpCode.NullabilityInference
@@ -109,6 +110,19 @@ namespace ICSharpCode.NullabilityInference
                 localVariables.RemoveAt(localVariables.Count - 1);
             }
             return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitLocalFunction(ILocalFunctionOperation operation, EdgeBuildingContext argument)
+        {
+            var outerReturnType = syntaxVisitor.currentMethodReturnType;
+            try {
+                syntaxVisitor.currentMethodReturnType = typeSystem.GetSymbolType(operation.Symbol);
+                foreach (var child in operation.Children)
+                    child.Accept(this, EdgeBuildingContext.Normal);
+                return typeSystem.VoidType;
+            } finally {
+                syntaxVisitor.currentMethodReturnType = outerReturnType;
+            }
         }
 
         public override TypeWithNode VisitSwitch(ISwitchOperation operation, EdgeBuildingContext argument)
@@ -1164,7 +1178,7 @@ namespace ICSharpCode.NullabilityInference
                     HandleMethodGroup(methodReference, delegateReturnType, delegateParameters);
                     break;
                 default:
-                    throw new NotImplementedException($"DelegateCreation with {operation.Target}");
+                    throw new NotImplementedException($"DelegateCreation with {operation.Target} near {operation.Syntax?.GetLocation().StartPosToString()}");
             }
             return type;
         }

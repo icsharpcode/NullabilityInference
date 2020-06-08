@@ -256,6 +256,19 @@ class Program {
         }
 
         [Fact]
+        public void CallLocalFunction()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+static class Program {
+    public static string Test(string input) {
+        return Identity(input);
+
+        string Identity(string input) => input;
+    }
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
