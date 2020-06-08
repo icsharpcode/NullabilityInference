@@ -210,6 +210,13 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitLabeled(ILabeledOperation operation, EdgeBuildingContext argument)
+        {
+            if (operation.Operation != null)
+                operation.Operation.Accept(this, argument);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitUsing(IUsingOperation operation, EdgeBuildingContext argument)
         {
             foreach (var child in operation.Children)
