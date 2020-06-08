@@ -187,17 +187,19 @@ namespace ICSharpCode.NullabilityInference
             if (node.Parent is TypeParameterConstraintClauseSyntax constraint && constraint.Name == node)
                 return false;
             switch (node.Parent?.Kind()) {
-                case SyntaxKind.ExplicitInterfaceSpecifier:
-                case SyntaxKind.TypeOfExpression:
-                case SyntaxKind.IsExpression:
-                case SyntaxKind.ObjectCreationExpression:
-                case SyntaxKind.ArrayCreationExpression:
+                case SyntaxKind.ExplicitInterfaceSpecifier: // void IDisposable?.Dispose()
+                case SyntaxKind.TypeOfExpression: // typeof(string?)
+                case SyntaxKind.IsExpression: // x is string?
+                case SyntaxKind.ObjectCreationExpression: // new Class?()
+                case SyntaxKind.ArrayCreationExpression:  // new string[]?
                 case SyntaxKind.QualifiedName:
                 case SyntaxKind.AliasQualifiedName:
-                case SyntaxKind.SimpleMemberAccessExpression:
-                case SyntaxKind.SimpleBaseType:
-                case SyntaxKind.AsExpression:
-                case SyntaxKind.UsingDirective:
+                case SyntaxKind.SimpleMemberAccessExpression: // Console?.WriteLine
+                case SyntaxKind.SimpleBaseType: // : IDisposable?
+                case SyntaxKind.AsExpression: // x as string?
+                case SyntaxKind.UsingDirective: // using System?;
+                case SyntaxKind.DeclarationPattern: // x is string? b
+                case SyntaxKind.Argument: // type name can appears as argument in nameof() expression
                     return false;
             }
             return true;
