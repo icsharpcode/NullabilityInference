@@ -132,12 +132,38 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        protected abstract NullabilityNode GetMappedNode(TypeSyntax node);
+
+        public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
+        {
+            var type = node.ElementType.Accept(this);
+            // Handle nested arrays
+            foreach (var rankSpec in node.RankSpecifiers.Reverse()) {
+                // Trying to insert `?` for nested arrays will be tricky,
+                // because `int[,][]` with nullable nested arrays has to turn into `int[]?[,]`
+                // So for now, just handle nested arrays as oblivious.
+                var arrayType = type.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(type.Type, rankSpec.Rank) : null;
+                type = new TypeWithNode(arrayType, typeSystem.ObliviousNode, new[] { type });
+            }
+            if (CanBeMadeNullableSyntax(node))
+                return type.WithNode(GetMappedNode(node));
+            else
+                return type;
+        }
+
         public override TypeWithNode VisitPointerType(PointerTypeSyntax node)
         {
             var typeInfo = semanticModel.GetTypeInfo(node, cancellationToken);
             Debug.Assert(typeInfo.Type is IPointerTypeSymbol);
             var elementType = node.ElementType.Accept(this);
             return new TypeWithNode(typeInfo.Type, typeSystem.ObliviousNode, new[] { elementType });
+        }
+
+        public override TypeWithNode VisitTupleType(TupleTypeSyntax node)
+        {
+            var elementTypes = node.Elements.Select(e => e.Type.Accept(this)).ToArray();
+            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
+            return new TypeWithNode(symbolInfo.Symbol as ITypeSymbol, typeSystem.ObliviousNode, elementTypes);
         }
 
         public override TypeWithNode VisitRefType(RefTypeSyntax node)

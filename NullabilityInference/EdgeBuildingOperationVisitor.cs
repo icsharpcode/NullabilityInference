@@ -763,10 +763,20 @@ namespace ICSharpCode.NullabilityInference
 
         private void HandleArrayInitializer(IArrayInitializerOperation operation, TypeWithNode arrayType)
         {
-            TypeWithNode elementType = arrayType.TypeArguments.Single();
+            TypeWithNode elementType;
+            if (arrayType.Type is IArrayTypeSymbol arrayTypeSym && arrayTypeSym.Rank > 1) {
+                var lowerDimArrayType = typeSystem.Compilation.CreateArrayTypeSymbol(arrayTypeSym.ElementType, arrayTypeSym.Rank - 1);
+                elementType = new TypeWithNode(lowerDimArrayType, typeSystem.ObliviousNode, arrayType.TypeArguments);
+            } else {
+                elementType = arrayType.TypeArguments.Single();
+            }
             foreach (var elementInit in operation.ElementValues) {
-                var initType = Visit(elementInit, EdgeBuildingContext.Normal);
-                tsBuilder.CreateAssignmentEdge(source: initType, target: elementType, new EdgeLabel("ArrayInit", elementInit));
+                if (elementInit is IArrayInitializerOperation nestedArrayInit) {
+                    HandleArrayInitializer(nestedArrayInit, elementType);
+                } else {
+                    var initType = Visit(elementInit, EdgeBuildingContext.Normal);
+                    tsBuilder.CreateAssignmentEdge(source: initType, target: elementType, new EdgeLabel("ArrayInit", elementInit));
+                }
             }
         }
 

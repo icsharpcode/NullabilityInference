@@ -119,23 +119,9 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
-        public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
+        protected override NullabilityNode GetMappedNode(TypeSyntax node)
         {
-            var elementType = node.ElementType.Accept(this);
-            var arrayType = elementType.Type != null ? semanticModel.Compilation.CreateArrayTypeSymbol(elementType.Type) : null;
-            // in an ArrayCreationExpression, the rank specifiers may contain arbitrary sub-expressions
-            foreach (var rank in node.RankSpecifiers) {
-                rank.Accept(this);
-            }
-            var nullNode = CanBeMadeNullableSyntax(node) ? Mapping.CreateNewNode(node) : typeSystem.ObliviousNode;
-            return new TypeWithNode(arrayType, nullNode, new[] { elementType });
-        }
-
-        public override TypeWithNode VisitTupleType(TupleTypeSyntax node)
-        {
-            var elementTypes = node.Elements.Select(e => e.Type.Accept(this)).ToArray();
-            var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
-            return new TypeWithNode(symbolInfo.Symbol as ITypeSymbol, typeSystem.ObliviousNode, elementTypes);
+            return Mapping.CreateNewNode(node);
         }
 
         public override TypeWithNode VisitVariableDeclaration(VariableDeclarationSyntax node)

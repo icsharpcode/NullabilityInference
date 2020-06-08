@@ -400,6 +400,56 @@ class Program {
         }
 
         [Fact]
+        public void MultiDimArrayElement()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1, 1];
+        arr[0,0 ] = input;
+        return arr[0, 0];
+    }
+}"));
+        }
+
+        [Fact]
+        public void MultiDimArrayElementViaArrayInitializer()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1, 1] { { input } };
+        return arr[0, 0];
+    }
+}"));
+        }
+
+        [Fact]
+        public void NestedArrayElement()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[1][];
+        arr[0][0] = input;
+        return arr[0][0];
+    }
+}"));
+        }
+
+        [Fact]
+        public void NestedArrayElementViaArrayInitializer()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var arr = new string[][] { new string[] { input } };
+        return arr[0][0];
+    }
+}"));
+        }
+
+        [Fact]
         public void CallIndexer()
         {
             Assert.True(HasPathFromParameterToReturnType(@"
