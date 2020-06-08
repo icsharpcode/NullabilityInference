@@ -82,7 +82,17 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode DefaultVisit(IOperation operation, EdgeBuildingContext argument)
         {
-            throw new NotImplementedException(operation.Kind.ToString());
+            Debug.Fail($"Unhandled operation {operation.Kind} near {operation.Syntax?.GetLocation().StartPosToString()}");
+            foreach (var child in operation.Children)
+                child.Accept(this, EdgeBuildingContext.Normal);
+            return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitInvalid(IInvalidOperation operation, EdgeBuildingContext argument)
+        {
+            foreach (var child in operation.Children)
+                child.Accept(this, EdgeBuildingContext.Normal);
+            return typeSystem.GetObliviousType(operation.Type);
         }
 
         public override TypeWithNode VisitMethodBodyOperation(IMethodBodyOperation operation, EdgeBuildingContext argument)
