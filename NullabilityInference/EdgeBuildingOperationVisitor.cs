@@ -799,7 +799,11 @@ namespace ICSharpCode.NullabilityInference
             if (operation.Type?.IsValueType == true) {
                 return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
             } else if (operation.ConstantValue.HasValue && operation.ConstantValue.Value == null) {
-                return new TypeWithNode(operation.Type, typeSystem.NullableNode);
+                if (operation.Type != null) {
+                    return typeSystem.GetObliviousType(operation.Type).WithNode(typeSystem.NullableNode);
+                } else {
+                    return new TypeWithNode(operation.Type, typeSystem.NullableNode);
+                }
             } else {
                 return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
             }
