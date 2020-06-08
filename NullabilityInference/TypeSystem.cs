@@ -172,7 +172,7 @@ namespace ICSharpCode.NullabilityInference
             //   baseTypeInstance = IEnumerable<KeyValuePair<string, string>>
             //   substitution = {TKey: string#1, TValue: string#2}
             // Returns `IEnumerable<KeyValuePair<string#1, string#2>>`
-            if (!baseTypes.TryGetValue((derivedTypeDef, baseType.OriginalDefinition), out var typeWithNode)) {
+            if (!baseTypes.TryGetValue((derivedTypeDef, baseType), out var typeWithNode)) {
                 typeWithNode = FromType(baseType, NullableAnnotation.None);
             }
             return typeWithNode.WithSubstitution(baseTypeInstance, substitution);
@@ -231,7 +231,7 @@ namespace ICSharpCode.NullabilityInference
             }
             var visited = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
             var worklist = new Stack<TypeWithNode>();
-            visited.Add(derivedType.Type.OriginalDefinition);
+            visited.Add(derivedType.Type);
             worklist.Push(derivedType);
             while (worklist.Count > 0) {
                 derivedType = worklist.Pop();
@@ -239,7 +239,7 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var baseType in GetDirectBases(derivedType, includeInterfaces)) {
                     if (baseType.Type == null)
                         continue;
-                    if (visited.Add(baseType.Type.OriginalDefinition)) {
+                    if (visited.Add(baseType.Type)) {
                         worklist.Push(baseType);
                     }
                 }
@@ -249,19 +249,22 @@ namespace ICSharpCode.NullabilityInference
         /// <summary>
         /// Gets the `TypeWithNode` for the specified base type (or specified interface) of the derivedType.
         /// </summary>
-        internal TypeWithNode? GetBaseType(TypeWithNode derivedType, INamedTypeSymbol baseTypeDefinition)
+        internal TypeWithNode? GetBaseType(TypeWithNode derivedType, INamedTypeSymbol desiredBaseType)
         {
             // Example:
             //   derivedType = Dictionary<string#1, string#2>#3
             //   baseTypeDefinition = IEnumerable
             // ->
             //   return IEnumerable<KeyValuePair<string#1, string#2>>#3
-            foreach (var baseType in GetAllBases(derivedType, includeInterfaces: baseTypeDefinition.TypeKind == TypeKind.Interface)) {
-                if (SymbolEqualityComparer.Default.Equals(baseType.Type?.OriginalDefinition, baseTypeDefinition)) {
+            TypeWithNode? fallbackResult = null;
+            foreach (var baseType in GetAllBases(derivedType, includeInterfaces: desiredBaseType.TypeKind == TypeKind.Interface)) {
+                if (SymbolEqualityComparer.Default.Equals(baseType.Type, desiredBaseType)) {
                     return baseType;
+                } else if (SymbolEqualityComparer.Default.Equals(baseType.Type?.OriginalDefinition, desiredBaseType)) {
+                    fallbackResult = baseType;
                 }
             }
-            return null;
+            return fallbackResult;
         }
 
         public IEnumerable<NullabilityNode> AllNodes {
@@ -352,7 +355,8 @@ namespace ICSharpCode.NullabilityInference
             {
                 if (baseType.Type == null)
                     return;
-                var key = (derivedType.OriginalDefinition, baseType.Type.OriginalDefinition);
+                Debug.Assert(SymbolEqualityComparer.Default.Equals(derivedType, derivedType.OriginalDefinition));
+                var key = (derivedType.OriginalDefinition, baseType.Type);
                 AddAction(ts => ts.baseTypes[key] = baseType);
             }
 

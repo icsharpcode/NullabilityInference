@@ -195,6 +195,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
+            node.ExplicitInterfaceSpecifier?.Accept(this);
             return HandleMethodDeclaration(node);
         }
 
@@ -214,7 +215,7 @@ namespace ICSharpCode.NullabilityInference
         }
 
         private TypeWithNode HandleMethodDeclaration(BaseMethodDeclarationSyntax node)
-        { 
+        {
             var outerMethodReturnType = currentMethodReturnType;
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
@@ -236,6 +237,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
         {
+            node.ExplicitInterfaceSpecifier?.Accept(this);
             var outerMethodReturnType = currentMethodReturnType;
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
@@ -256,6 +258,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
         {
+            node.ExplicitInterfaceSpecifier?.Accept(this);
             var outerMethodReturnType = currentMethodReturnType;
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
@@ -275,6 +278,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitEventDeclaration(EventDeclarationSyntax node)
         {
+            node.ExplicitInterfaceSpecifier?.Accept(this);
             var outerMethodReturnType = currentMethodReturnType;
             try {
                 var symbol = semanticModel.GetDeclaredSymbol(node);
@@ -355,6 +359,25 @@ namespace ICSharpCode.NullabilityInference
 
                     break;
             }
+        }
+
+        public override TypeWithNode VisitExplicitInterfaceSpecifier(ExplicitInterfaceSpecifierSyntax node)
+        {
+            // For something like "IEnumerator<string?> IEnumerable<string?>.GetEnumerator()",
+            // the return type is already handled by HandleInterfaceImplementations/CreateOverrideEdge
+            // and effectively connected with the node for the current classes' base list.
+
+            // Here we do the same for the occurrence in the explicit interface specifier.
+            var interfaceType = node.Name.Accept(this);
+            var symbol = semanticModel.GetEnclosingSymbol(node.SpanStart, cancellationToken);
+            if (symbol is INamedTypeSymbol containingType && interfaceType.Type is INamedTypeSymbol implementedInterface) {
+                var thisType = typeSystem.GetObliviousType(containingType);
+                var implementedInterfaceType = typeSystem.GetBaseType(thisType, implementedInterface);
+                if (implementedInterfaceType != null) {
+                    typeSystemBuilder.CreateTypeEdge(interfaceType, implementedInterfaceType.Value, null, VarianceKind.None, new EdgeLabel("explicit interface impl", node));
+                }
+            }
+            return typeSystem.VoidType;
         }
 
         private void HandleLackOfConstructor(TypeDeclarationSyntax node, bool skipInstanceCtor)

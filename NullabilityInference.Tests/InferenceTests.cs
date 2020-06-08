@@ -1055,5 +1055,30 @@ class Program {
     }
 }");
         }
+
+
+        [Fact]
+        public void ExplicitInterfaceImplsOnlyDifferingInTypeArgs()
+        {
+            string program = @"
+using System.Collections;
+using System.Collections.Generic;
+public class MyList : IEnumerable<string?>, IEnumerable<(string, string?)> {
+    IEnumerator<string?> IEnumerable<string?>.GetEnumerator() {
+        yield return null;
+    }
+
+    IEnumerator<(string, string?)> IEnumerable<(string, string?)>.GetEnumerator() {
+        yield return (string.Empty, null);
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        throw new System.NotImplementedException();
+    }
+}";
+            AssertNullabilityInference(expectedProgram: program, inputProgram: program);
+        }
+
     }
 }

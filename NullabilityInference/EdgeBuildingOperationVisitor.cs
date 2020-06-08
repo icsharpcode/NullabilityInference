@@ -489,7 +489,7 @@ namespace ICSharpCode.NullabilityInference
         private IReadOnlyList<TypeWithNode> ClassTypeArgumentsForMemberAccess(TypeWithNode? receiverType, ISymbol member)
         {
             if (receiverType != null) {
-                receiverType = typeSystem.GetBaseType(receiverType.Value, member.ContainingType.OriginalDefinition);
+                receiverType = typeSystem.GetBaseType(receiverType.Value, member.ContainingType);
             }
             if (receiverType == null) {
                 receiverType = typeSystem.GetObliviousType(member.ContainingType);
@@ -938,7 +938,7 @@ namespace ICSharpCode.NullabilityInference
             }
 
             if (target.Type is INamedTypeSymbol namedTargetType
-                && typeSystem.GetBaseType(input, namedTargetType.OriginalDefinition) is TypeWithNode inputBase) {
+                && typeSystem.GetBaseType(input, namedTargetType) is TypeWithNode inputBase) {
                 // We might be dealing with
                 //     input.Type = Dictionary<string#1, string#2>#3
                 // and targetType = IEnumerable<KeyValuePair<string#4, string#5>>#6
@@ -961,7 +961,7 @@ namespace ICSharpCode.NullabilityInference
                     }
                 }
             } else if (input.Type is INamedTypeSymbol namedInputType
-                 && typeSystem.GetBaseType(target, namedInputType.OriginalDefinition) is TypeWithNode targetBase) {
+                 && typeSystem.GetBaseType(target, namedInputType) is TypeWithNode targetBase) {
                 // Same as above, but for casts in the other direction:
                 int arity = namedInputType.FullArity();
                 Debug.Assert(input.TypeArguments.Count == arity);
