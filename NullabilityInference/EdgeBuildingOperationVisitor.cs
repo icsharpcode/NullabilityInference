@@ -36,10 +36,15 @@ namespace ICSharpCode.NullabilityInference
         /// </summary>
         Normal,
         /// <summary>
-        /// Translation as LValue for assignments.
+        /// Visiting an LValue for an assignments.
         /// In this mode, the flow state is ignored.
         /// </summary>
-        LValue
+        LValue,
+        /// <summary>
+        /// Visiting a condition that will decide control-flow.
+        /// In this mode, operations can create different flow-state onTrue/onFalse.
+        /// </summary>
+        Condition
     }
 
     internal class EdgeBuildingOperationVisitor : OperationVisitor<EdgeBuildingContext, TypeWithNode>
@@ -50,6 +55,9 @@ namespace ICSharpCode.NullabilityInference
 
         // Maps the known flow-state for variables
         private readonly FlowState flowState;
+
+        // Used to return the separate flow-states in EdgeBuildingContext.Condition mode.
+        private FlowState.Snapshot? flowStateReturnedOnTrue, flowStateReturnedOnFalse;
 
         internal EdgeBuildingOperationVisitor(EdgeBuildingSyntaxVisitor syntaxVisitor, TypeSystem typeSystem, TypeSystem.Builder tsBuilder)
         {
@@ -65,6 +73,8 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode Visit(IOperation operation, EdgeBuildingContext argument)
         {
+            Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null,
+                "flowStateReturned members should only be used when returning from Visit, never when entering");
             TypeWithNode result = operation.Accept(this, argument);
             if (result.Node == null) {
                 // This happens with a "NoneOperation", because VisitNoneOperation() in the base class
@@ -90,11 +100,18 @@ namespace ICSharpCode.NullabilityInference
 
         private (FlowState.Snapshot onTrue, FlowState.Snapshot onFalse) VisitCondition(IOperation operation)
         {
-            operation?.Accept(this, EdgeBuildingContext.Normal);
-            // TODO: add support for separate flow-state for conditions being true/false,
-            // e.g. in order to handle `if (mapping.TryGetValue(element, out node))`
-            var snapshot = flowState.SaveSnapshot();
-            return (snapshot, snapshot);
+            Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
+            operation?.Accept(this, EdgeBuildingContext.Condition);
+            if (flowStateReturnedOnTrue != null && flowStateReturnedOnFalse != null) {
+                var result = (flowStateReturnedOnTrue.Value, flowStateReturnedOnFalse.Value);
+                flowStateReturnedOnTrue = null;
+                flowStateReturnedOnFalse = null;
+                return result;
+            } else {
+                Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
+                var snapshot = flowState.SaveSnapshot();
+                return (snapshot, snapshot);
+            }
         }
 
         public override TypeWithNode DefaultVisit(IOperation operation, EdgeBuildingContext argument)
@@ -372,7 +389,7 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitConditional(IConditionalOperation operation, EdgeBuildingContext argument)
         {
             var (onTrue, onFalse) = VisitCondition(operation.Condition);
-            
+
             var mergedType = tsBuilder.CreateTemporaryType(operation.Type);
             mergedType.SetName("?:");
 
@@ -393,6 +410,11 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitUnaryOperator(IUnaryOperation operation, EdgeBuildingContext argument)
         {
+            if (argument == EdgeBuildingContext.Condition && operation.OperatorMethod == null && operation.OperatorKind == UnaryOperatorKind.Not) {
+                var (onTrue, onFalse) = VisitCondition(operation.Operand);
+                (flowStateReturnedOnFalse, flowStateReturnedOnTrue) = (onTrue, onFalse);
+                return typeSystem.GetObliviousType(operation.Type);
+            }
             var operand = Visit(operation.Operand, EdgeBuildingContext.Normal);
             if (operation.OperatorMethod != null) {
                 var operatorParams = operation.OperatorMethod.Parameters;
@@ -428,6 +450,23 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitBinaryOperator(IBinaryOperation operation, EdgeBuildingContext argument)
         {
+            if (operation.OperatorKind == BinaryOperatorKind.ConditionalAnd || operation.OperatorKind == BinaryOperatorKind.ConditionalOr) {
+                Debug.Assert(operation.OperatorMethod == null);
+                // logical operator does not always evaluate the RHS, so we need to be careful with the flow-state
+                var (onTrue, onFalse) = VisitCondition(operation.LeftOperand);
+                FlowState.Snapshot onShortCircuit;
+                if (operation.OperatorKind == BinaryOperatorKind.ConditionalAnd) {
+                    flowState.RestoreSnapshot(onTrue); // && evaluates the RHS only if the lhs is true
+                    onShortCircuit = onFalse;
+                } else {
+                    Debug.Assert(operation.OperatorKind == BinaryOperatorKind.ConditionalOr);
+                    flowState.RestoreSnapshot(onFalse); // && evaluates the RHS only if the lhs is false
+                    onShortCircuit = onTrue;
+                }
+                Visit(operation.RightOperand, EdgeBuildingContext.Normal);
+                flowState.JoinWith(onShortCircuit, tsBuilder, new EdgeLabel("short-circuit", operation));
+                return typeSystem.GetObliviousType(operation.Type);
+            }
             var lhs = Visit(operation.LeftOperand, EdgeBuildingContext.Normal);
             var rhs = Visit(operation.RightOperand, EdgeBuildingContext.Normal);
             if (operation.OperatorMethod != null) {
@@ -554,8 +593,8 @@ namespace ICSharpCode.NullabilityInference
             if (!localVarTypes.TryGetValue(operation.Local, out TypeWithNode variableType)) {
                 variableType = typeSystem.GetSymbolType(operation.Local);
             }
-            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode)) {
-                variableType = variableType.WithNode(flowNode);
+            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
+                variableType = variableType.WithFlowState(flowNode, flowLabel);
             }
             return variableType;
         }
@@ -565,21 +604,32 @@ namespace ICSharpCode.NullabilityInference
             if (!localVarTypes.TryGetValue(operation.Parameter, out TypeWithNode parameterType)) {
                 parameterType = typeSystem.GetSymbolType(operation.Parameter);
             }
-            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode)) {
-                parameterType = parameterType.WithNode(flowNode);
+            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
+                parameterType = parameterType.WithFlowState(flowNode, flowLabel);
             }
             return parameterType;
         }
 
-        private bool TryGetFlowState(IOperation operation, [NotNullWhen(true)] out NullabilityNode? flowNode)
+        private bool TryGetFlowState(IOperation operation, [NotNullWhen(true)] out NullabilityNode? flowNode, out string? flowLabel)
         {
             if (syntaxVisitor.IsNonNullFlow(operation.Syntax)) {
                 flowNode = typeSystem.NonNullNode;
+                flowLabel = "(not-null via roslyn)";
                 return true;
             } else if (AccessPath.FromOperation(operation) is AccessPath path) {
-                return flowState.TryGetNode(path, out flowNode);
+                if (flowState.TryGetNode(path, out flowNode)) {
+#if DEBUG
+                    flowLabel = $"(flow-state of '{path}')";
+#else
+                    flowLabel = "(via flow-state)";
+#endif
+                    return true;
+                }
+                flowLabel = null;
+                return false;
             } else {
                 flowNode = null;
+                flowLabel = null;
                 return false;
             }
         }
@@ -640,8 +690,8 @@ namespace ICSharpCode.NullabilityInference
             var substitution = SubstitutionForMemberAccess(receiverType, operation.Field);
             var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
             fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
-            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode)) {
-                fieldType = fieldType.WithNode(flowNode);
+            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
+                fieldType = fieldType.WithFlowState(flowNode, flowLabel);
             }
             return fieldType;
         }
@@ -650,7 +700,7 @@ namespace ICSharpCode.NullabilityInference
         {
             TypeWithNode? receiverType = GetReceiverType(operation);
             var substitution = SubstitutionForMemberAccess(receiverType, operation.Property);
-            HandleArguments(substitution, operation.Arguments);
+            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
             TypeWithNode propertyType;
             if (operation.Property.ContainingType.IsAnonymousType) {
                 // For anonymous types, we act as if the member types are all type arguments.
@@ -668,8 +718,8 @@ namespace ICSharpCode.NullabilityInference
                 propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
                 propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
             }
-            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode)) {
-                propertyType = propertyType.WithNode(flowNode);
+            if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
+                propertyType = propertyType.WithFlowState(flowNode, flowLabel);
             }
             return propertyType;
         }
@@ -727,7 +777,7 @@ namespace ICSharpCode.NullabilityInference
                 }
             }
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
-            HandleArguments(substitution, operation.Arguments);
+            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
             var returnType = typeSystem.GetSymbolType(operation.TargetMethod.OriginalDefinition);
             returnType = returnType.WithSubstitution(operation.TargetMethod.ReturnType, substitution);
             return returnType;
@@ -780,17 +830,62 @@ namespace ICSharpCode.NullabilityInference
             _ => null,
         };
 
-        private TypeSubstitution HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments)
+        private TypeSubstitution HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext invocationContext)
         {
+            Action? afterCall = null;
+            FlowState? flowStateOnTrue = null;
+            FlowState? flowStateOnFalse = null;
             foreach (var arg in arguments) {
                 var param = arg.Parameter.OriginalDefinition;
                 var parameterType = typeSystem.GetSymbolType(param);
-                var argumentType = Visit(arg.Value, EdgeBuildingContext.Normal);
+                bool isLValue = param.RefKind == RefKind.Ref || param.RefKind == RefKind.Out;
+                var argumentType = Visit(arg.Value, isLValue ? EdgeBuildingContext.LValue : EdgeBuildingContext.Normal);
                 // Create an assignment edge from argument to parameter.
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
                 var variance = (param.RefKind.ToVariance(), VarianceKind.In).Combine();
                 tsBuilder.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance, new EdgeLabel("Argument", arg));
+                if (isLValue && AccessPath.FromOperation(arg.Value) is AccessPath path) {
+                    // Processing of the flow-state is delayed until after all arguments were visited.
+                    afterCall += delegate {
+                        if (invocationContext == EdgeBuildingContext.Condition) {
+                            if (flowStateOnTrue == null || flowStateOnFalse == null) {
+                                // split flow-state based on return value
+                                var snapshot = flowState.SaveSnapshot();
+                                flowStateOnTrue = new FlowState(typeSystem);
+                                flowStateOnFalse = new FlowState(typeSystem);
+                                flowStateOnTrue.RestoreSnapshot(snapshot);
+                                flowStateOnFalse.RestoreSnapshot(snapshot);
+                            }
+                            if (param.RefKind == RefKind.Out) {
+                                // set flow-state to value provided by the method
+                                var (onTrue, onFalse) = typeSystem.GetOutParameterFlowNodes(param, substitution);
+                                flowStateOnTrue.SetNode(path, onTrue, clearMembers: true);
+                                flowStateOnFalse.SetNode(path, onFalse, clearMembers: true);
+                            } else {
+                                // the method might have mutated the by-ref argument -> reset flow-state to argument's declared type
+                                flowStateOnTrue.SetNode(path, argumentType.Node, clearMembers: true);
+                                flowStateOnFalse.SetNode(path, argumentType.Node, clearMembers: true);
+                            }
+                        } else {
+                            if (param.RefKind == RefKind.Out) {
+                                // set flow-state to value provided by the method
+                                flowState.SetNode(path, parameterType.Node, clearMembers: true);
+                            } else {
+                                // the method might have mutated the by-ref argument -> reset flow-state to argument's declared type
+                                flowState.SetNode(path, argumentType.Node, clearMembers: true);
+                            }
+                        }
+                    };
+                }
+            }
+            afterCall?.Invoke();
+            if (invocationContext == EdgeBuildingContext.Condition) {
+                flowStateReturnedOnTrue = flowStateOnTrue?.SaveSnapshot();
+                flowStateReturnedOnFalse = flowStateOnFalse?.SaveSnapshot();
+            } else {
+                Debug.Assert(flowStateOnTrue == null && flowStateOnFalse == null);
+                Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
             }
             return substitution;
         }
@@ -802,7 +897,7 @@ namespace ICSharpCode.NullabilityInference
             if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
                 var newObjectType = syntax.Type.Accept(syntaxVisitor).WithNode(typeSystem.NonNullNode);
                 var substitution = new TypeSubstitution(newObjectType.TypeArguments, new TypeWithNode[0]);
-                HandleArguments(substitution, operation.Arguments);
+                HandleArguments(substitution, operation.Arguments, invocationContext: argument);
 
                 var oldObjectCreationType = currentObjectCreationType;
                 try {

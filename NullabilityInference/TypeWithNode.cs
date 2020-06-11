@@ -37,6 +37,10 @@ namespace ICSharpCode.NullabilityInference
         // This should be ImmutableArray<TypeWithNode>, but that runs into
         //   https://github.com/dotnet/runtime/issues/12024
         public readonly IReadOnlyList<TypeWithNode> TypeArguments;
+#if DEBUG
+        internal readonly string? FlowLabel;
+#endif
+
         private static readonly TypeWithNode[] emptyTypeArguments = { };
 
         public TypeWithNode(ITypeSymbol? type, NullabilityNode node, IReadOnlyList<TypeWithNode>? typeArguments = null)
@@ -45,6 +49,17 @@ namespace ICSharpCode.NullabilityInference
             this.Node = node;
             this.TypeArguments = typeArguments ?? emptyTypeArguments;
             Debug.Assert(this.TypeArguments.Count == type.FullArity());
+#if DEBUG
+            this.FlowLabel = null;
+#endif
+        }
+
+        private TypeWithNode(ITypeSymbol? type, NullabilityNode node, IReadOnlyList<TypeWithNode>? typeArguments, string? flowLabel)
+            : this(type, node, typeArguments)
+        {
+#if DEBUG
+            this.FlowLabel = flowLabel;
+#endif
         }
 
         /// <summary>
@@ -53,6 +68,11 @@ namespace ICSharpCode.NullabilityInference
         internal TypeWithNode WithNode(NullabilityNode newNode)
         {
             return new TypeWithNode(Type, newNode, TypeArguments);
+        }
+
+        internal TypeWithNode WithFlowState(NullabilityNode flowNode, string? flowLabel)
+        {
+            return new TypeWithNode(Type, flowNode, TypeArguments, flowLabel);
         }
 
         /// <summary>

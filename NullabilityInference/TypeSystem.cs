@@ -81,7 +81,7 @@ namespace ICSharpCode.NullabilityInference
             return symbol;
         }
 
-        public TypeWithNode GetSymbolType(ISymbol symbol)
+        public TypeWithNode GetSymbolType(ISymbol symbol, bool ignoreAttributes = false)
         {
             symbol = SymbolAdjustments(symbol);
             if (symbolType.TryGetValue(symbol, out var type)) {
@@ -95,19 +95,19 @@ namespace ICSharpCode.NullabilityInference
             switch (symbol.Kind) {
                 case SymbolKind.Method:
                     var method = (IMethodSymbol)symbol;
-                    return FromType(method.ReturnType, method.ReturnNullableAnnotation, method.GetReturnTypeAttributes());
+                    return FromType(method.ReturnType, method.ReturnNullableAnnotation, ignoreAttributes ? default : method.GetReturnTypeAttributes());
                 case SymbolKind.Parameter:
                     var parameter = (IParameterSymbol)symbol;
-                    return FromType(parameter.Type, parameter.NullableAnnotation, parameter.GetAttributes());
+                    return FromType(parameter.Type, parameter.NullableAnnotation, ignoreAttributes ? default : parameter.GetAttributes());
                 case SymbolKind.Property:
                     var property = (IPropertySymbol)symbol;
-                    return FromType(property.Type, property.NullableAnnotation, property.GetAttributes());
+                    return FromType(property.Type, property.NullableAnnotation, ignoreAttributes ? default : property.GetAttributes());
                 case SymbolKind.Field:
                     var field = (IFieldSymbol)symbol;
-                    return FromType(field.Type, field.NullableAnnotation, field.GetAttributes());
+                    return FromType(field.Type, field.NullableAnnotation, ignoreAttributes ? default : field.GetAttributes());
                 case SymbolKind.Event:
                     var ev = (IEventSymbol)symbol;
-                    return FromType(ev.Type, ev.NullableAnnotation, ev.GetAttributes());
+                    return FromType(ev.Type, ev.NullableAnnotation, ignoreAttributes ? default : ev.GetAttributes());
                 default:
                     throw new NotImplementedException($"External symbol: {symbol.Kind}");
             }
@@ -162,6 +162,29 @@ namespace ICSharpCode.NullabilityInference
                 return new TypeWithNode(pts, ObliviousNode, new[] { GetObliviousType(pts.PointedAtType) });
             }
             return new TypeWithNode(type, ObliviousNode);
+        }
+
+        internal (NullabilityNode onTrue, NullabilityNode onFalse) GetOutParameterFlowNodes(IParameterSymbol param, TypeSubstitution substitution)
+        {
+            var ty = GetSymbolType(param, ignoreAttributes: true);
+            if (ty.Type is ITypeParameterSymbol tp) {
+                ty = substitution[tp.TypeParameterKind, tp.FullOrdinal()];
+            }
+            var onTrue = ty.Node;
+            var onFalse = ty.Node;
+            foreach (var attr in param.GetAttributes()) {
+                string? attrName = attr.AttributeClass?.GetFullName();
+                if (attrName == "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute") {
+                    if (attr.ConstructorArguments.Single().Value is bool b) {
+                        (b ? ref onTrue : ref onFalse) = NullableNode;
+                    }
+                } else if (attrName == "System.Diagnostics.CodeAnalysis.NotNullWhenAttribute") {
+                    if (attr.ConstructorArguments.Single().Value is bool b) {
+                        (b ? ref onTrue : ref onFalse) = NonNullNode;
+                    }
+                }
+            }
+            return (onTrue, onFalse);
         }
 
         private TypeWithNode GetDirectBase(ITypeSymbol derivedTypeDef, INamedTypeSymbol baseType, INamedTypeSymbol baseTypeInstance, TypeSubstitution substitution)
@@ -455,6 +478,11 @@ namespace ICSharpCode.NullabilityInference
 
             internal void CreateTypeEdge(TypeWithNode source, TypeWithNode target, TypeSubstitution? targetSubstitution, VarianceKind variance, EdgeLabel label)
             {
+#if DEBUG
+                if (source.FlowLabel != null) {
+                    label = new EdgeLabel($"{label}\n{source.FlowLabel}");
+                }
+#endif
                 if (targetSubstitution != null && target.Type is ITypeParameterSymbol tp) {
                     // If calling `void SomeCall<T>(T x);` as `SomeCall<string>(null)`, then
                     // we need either `x: T?` or `T = string?`:

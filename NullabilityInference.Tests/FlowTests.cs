@@ -104,5 +104,33 @@ class Program {
     }
 }", returnNullable: false, returnDependsOnInput: true);
         }
+
+
+        [Fact]
+        public void GetOrCreateNode()
+        {
+            // 'node' local variable must be nullable, but GetNode return type can be non-nullable.
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class DataStructure
+{
+    class Node { }
+
+    Dictionary<string, Node> mapping = new Dictionary<string, Node>();
+
+    Node GetNode(string element)
+    {
+        Node? node;
+        if (!mapping.TryGetValue(element, out node))
+        {
+            node = new Node();
+            mapping.Add(element, node);
+        }
+        return node;
+    }
+
+}");
+        }
+
     }
 }

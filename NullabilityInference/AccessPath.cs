@@ -19,6 +19,7 @@
 using System;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -57,6 +58,9 @@ namespace ICSharpCode.NullabilityInference
             var list = ImmutableArray.CreateBuilder<ISymbol>();
             list.Reverse();
             while (operation is IMemberReferenceOperation mro && (mro.Kind == OperationKind.PropertyReference || mro.Kind == OperationKind.FieldReference)) {
+                if (mro.Member is IPropertySymbol prop && !prop.Parameters.IsEmpty) {
+                    return null; // indexers are not supported
+                }
                 list.Add(mro.Member);
                 operation = mro.Instance;
             }
@@ -98,6 +102,19 @@ namespace ICSharpCode.NullabilityInference
             if (Symbols.Length != other.Symbols.Length)
                 return false;
             return Symbols.Zip(other.Symbols, SymbolEqualityComparer.Default.Equals).All(b => b);
+        }
+
+        public override string ToString()
+        {
+            StringBuilder b = new StringBuilder();
+            if (Root == AccessPathRoot.This)
+                b.Append("this");
+            foreach (var sym in Symbols) {
+                if (b.Length > 0)
+                    b.Append('.');
+                b.Append(sym.Name);
+            }
+            return b.ToString();
         }
     }
 }
