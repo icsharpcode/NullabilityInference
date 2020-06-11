@@ -420,6 +420,34 @@ namespace ICSharpCode.NullabilityInference
                 return node;
             }
 
+            /// <summary>
+            /// Gets a nullability node that is nullable iff either input is nullable.
+            /// </summary>
+            public NullabilityNode Join(NullabilityNode a, NullabilityNode b, EdgeLabel edgeLabel)
+            {
+                if (a == b)
+                    return a;
+                if (a.NullType == NullType.NonNull)
+                    return b;
+                if (b.NullType == NullType.NonNull)
+                    return a;
+
+                if (a.NullType == NullType.Oblivious)
+                    return b;
+                if (b.NullType == NullType.Oblivious)
+                    return a;
+
+                if (a.NullType == NullType.Nullable)
+                    return a;
+                if (b.NullType == NullType.Nullable)
+                    return b;
+
+                var newNode = CreateTemporaryNode();
+                CreateEdge(a, newNode, edgeLabel);
+                CreateEdge(b, newNode, edgeLabel);
+                return newNode;
+            }
+
             internal void CreateAssignmentEdge(TypeWithNode source, TypeWithNode target, EdgeLabel label)
             {
                 CreateTypeEdge(source, target, null, VarianceKind.Out, label);

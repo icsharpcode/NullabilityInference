@@ -18,7 +18,7 @@
 
 using Xunit;
 
-namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
+namespace ICSharpCode.NullabilityInference.Tests
 {
     public class InferenceTests : NullabilityTestHelper
     {

@@ -27,8 +27,9 @@ using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
+using Xunit.Sdk;
 
-namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
+namespace ICSharpCode.NullabilityInference.Tests
 {
     public class NullabilityTestHelper
     {
@@ -92,6 +93,48 @@ namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
             var returnNode = engine.TypeSystem.GetSymbolType(testMethod).Node;
             // engine.ExportTypeGraph().Show();
             return ReachableNodes(parameterNode, n => n.Successors).Contains(returnNode);
+        }
+
+        [Flags]
+        protected enum TestedPaths
+        {
+            None = 0,
+            InputMustBeNonNull = 1,
+            ResultMustBeNullable = 2,
+            ResultDependsOnInput = 4,
+        }
+
+        protected static void CheckPaths(string program, bool? inputMustBeNonNull = null, bool? returnNullable = null, bool? returnDependsOnInput = null)
+        {
+            var (compilation, engine) = CompileAndAnalyze(program);
+            var programClass = compilation.GetTypeByMetadataName("Program");
+            Assert.False(programClass == null, "Could not find 'Program' in test");
+            var testMethod = (IMethodSymbol)programClass!.GetMembers("Test").Single();
+            var returnNode = engine.TypeSystem.GetSymbolType(testMethod).Node;
+            // engine.ExportTypeGraph().Show();
+            if (inputMustBeNonNull != null) {
+                var parameterNode = engine.TypeSystem.GetSymbolType(testMethod.Parameters.Single()).Node;
+                bool inputIsNonNull = ReachableNodes(parameterNode, n => n.Successors).Contains(engine.TypeSystem.NonNullNode);
+                if (inputMustBeNonNull != inputIsNonNull) {
+                    throw new AssertActualExpectedException(inputMustBeNonNull, inputIsNonNull,
+                        inputIsNonNull ? "Unexpected path from input to <nonnull>" : "Missing path from input to <nonnull>");
+                }
+            }
+            if (returnNullable != null) {
+                bool actual = ReachableNodes(engine.TypeSystem.NullableNode, n => n.Successors).Contains(returnNode);
+                if (returnNullable != actual) {
+                    throw new AssertActualExpectedException(returnNullable, actual,
+                        actual ? "Unexpected path from <nullable> to return" : "Missing path from <nullable> to return");
+                }
+            }
+            if (returnDependsOnInput != null) {
+                var parameterNode = engine.TypeSystem.GetSymbolType(testMethod.Parameters.Single()).Node;
+                bool actual = ReachableNodes(parameterNode, n => n.Successors).Contains(returnNode);
+                if (returnDependsOnInput != actual) {
+                    throw new AssertActualExpectedException(returnDependsOnInput, actual,
+                        actual ? "Unexpected path from parameter to return" : "Missing path from parameter to return");
+                }
+            }
         }
 
         private static HashSet<T> ReachableNodes<T>(T root, Func<T, IEnumerable<T>> successors)

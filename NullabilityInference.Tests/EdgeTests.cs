@@ -18,7 +18,7 @@
 
 using Xunit;
 
-namespace ICSharpCode.NullabilityInference.Tests.NullabilityInference
+namespace ICSharpCode.NullabilityInference.Tests
 {
     /// <summary>
     /// Unit tests where we check that an edge from parameter to return type was detected.
