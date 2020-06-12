@@ -132,5 +132,29 @@ class DataStructure
 }");
         }
 
+        [Fact]
+        public void ConditionalAnd()
+        {
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class DataStructure
+{
+    class Node { }
+
+    Dictionary<string, Node> mapping = new Dictionary<string, Node>();
+
+    Node GetNode(string element)
+    {
+        Node? node;
+        if (mapping.TryGetValue(element, out node) && IsValid(node))
+        {
+            return node;
+        }
+        return new Node();
+    }
+
+    bool IsValid(Node? n) => true;
+}");
+        }
     }
 }

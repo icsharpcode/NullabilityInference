@@ -463,8 +463,20 @@ namespace ICSharpCode.NullabilityInference
                     flowState.RestoreSnapshot(onFalse); // && evaluates the RHS only if the lhs is false
                     onShortCircuit = onTrue;
                 }
-                Visit(operation.RightOperand, EdgeBuildingContext.Normal);
-                flowState.JoinWith(onShortCircuit, tsBuilder, new EdgeLabel("short-circuit", operation));
+                if (argument == EdgeBuildingContext.Condition) {
+                    var (rhsTrue, rhsFalse) = VisitCondition(operation.RightOperand);
+                    if (operation.OperatorKind == BinaryOperatorKind.ConditionalAnd) {
+                        flowStateReturnedOnTrue = rhsTrue;
+                        flowStateReturnedOnFalse = JoinFlowSnapshots(onFalse, rhsFalse, new EdgeLabel("&& false", operation));
+                    } else {
+                        Debug.Assert(operation.OperatorKind == BinaryOperatorKind.ConditionalOr);
+                        flowStateReturnedOnTrue = JoinFlowSnapshots(onTrue, rhsTrue, new EdgeLabel("|| true", operation));
+                        flowStateReturnedOnFalse = rhsFalse;
+                    }
+                } else {
+                    Visit(operation.RightOperand, EdgeBuildingContext.Normal);
+                    flowState.JoinWith(onShortCircuit, tsBuilder, new EdgeLabel("short-circuit", operation));
+                }
                 return typeSystem.GetObliviousType(operation.Type);
             }
             var lhs = Visit(operation.LeftOperand, EdgeBuildingContext.Normal);
@@ -481,6 +493,14 @@ namespace ICSharpCode.NullabilityInference
                 }
             }
             return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        private FlowState.Snapshot JoinFlowSnapshots(FlowState.Snapshot a, FlowState.Snapshot b, EdgeLabel label)
+        {
+            FlowState s = new FlowState(typeSystem);
+            s.RestoreSnapshot(a);
+            s.JoinWith(b, tsBuilder, label);
+            return s.SaveSnapshot();
         }
 
         private TypeWithNode HandleOverloadedBinaryOperator(IOperation operation, TypeWithNode lhs, TypeWithNode rhs, IMethodSymbol operatorMethod, bool isLifted)
