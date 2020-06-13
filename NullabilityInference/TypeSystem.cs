@@ -608,5 +608,20 @@ namespace ICSharpCode.NullabilityInference
                 return edge;
             }
         }
+
+        internal IParameterSymbol? GetNotNullIfNotNullParam(IMethodSymbol method)
+        {
+            foreach (var attr in method.GetReturnTypeAttributes()) {
+                if (attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.NotNullIfNotNullAttribute"
+                    && attr.ConstructorArguments.Length == 1
+                    && attr.ConstructorArguments[0].Value is string parameterName) {
+                    foreach (var p in method.Parameters) {
+                        if (p.Name == parameterName)
+                            return p;
+                    }
+                }
+            }
+            return null;
+        }
     }
 }

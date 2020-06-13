@@ -259,5 +259,25 @@ class DataStructure
                 expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]").Replace("[using]", "using System.Diagnostics.CodeAnalysis;"),
                 inputProgram: program.Replace("[Attr] ", "").Replace("[using]", ""));
         }
+
+        [Fact]
+        public void UseNotNullIfNotNull()
+        {
+            string program = @"
+using System.Diagnostics.CodeAnalysis;
+class Program
+{
+	public void Test()
+    {
+		string a = Identitity(string.Empty);
+		string? b = Identitity(null);
+    }
+
+#nullable enable
+	[return: NotNullIfNotNull(""input"")]
+    public static string? Identitity(string? input) => input;
+}";
+            AssertNullabilityInference(program, program);
+        }
     }
 }

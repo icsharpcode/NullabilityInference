@@ -889,9 +889,14 @@ namespace ICSharpCode.NullabilityInference
             }
             methodTypeArgNodes = ExtendMethodTypeArguments(targetMethod, methodTypeArgNodes);
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
-            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
+            var argumentTypes = HandleArguments(substitution, operation.Arguments, invocationContext: argument);
             var returnType = typeSystem.GetSymbolType(targetMethod.OriginalDefinition);
             returnType = returnType.WithSubstitution(targetMethod.ReturnType, substitution);
+
+            if (typeSystem.GetNotNullIfNotNullParam(operation.TargetMethod.OriginalDefinition) is { } notNullParam) {
+                returnType = returnType.WithNode(argumentTypes[notNullParam.Ordinal].Node);
+            }
+
             return returnType;
         }
 
@@ -967,8 +972,9 @@ namespace ICSharpCode.NullabilityInference
             _ => null,
         };
 
-        private void HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext invocationContext)
+        private List<TypeWithNode> HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext invocationContext)
         {
+            List<TypeWithNode> argumentTypes = new List<TypeWithNode>();
             Action? afterCall = null;
             FlowState? flowStateOnTrue = null;
             FlowState? flowStateOnFalse = null;
@@ -977,6 +983,7 @@ namespace ICSharpCode.NullabilityInference
                 var parameterType = typeSystem.GetSymbolType(param);
                 bool isLValue = param.RefKind == RefKind.Ref || param.RefKind == RefKind.Out;
                 var argumentType = Visit(arg.Value, isLValue ? EdgeBuildingContext.LValue : EdgeBuildingContext.Normal);
+                argumentTypes.Add(argumentType);
                 // Create an assignment edge from argument to parameter.
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in
                 // multiple parameters uses the same nullability nodes for all occurrences.
@@ -1024,6 +1031,7 @@ namespace ICSharpCode.NullabilityInference
                 Debug.Assert(flowStateOnTrue == null && flowStateOnFalse == null);
                 Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
             }
+            return argumentTypes;
         }
 
         private TypeWithNode currentObjectCreationType;
