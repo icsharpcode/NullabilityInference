@@ -942,5 +942,33 @@ class Program {
     }
 }", returnNullable: true, returnDependsOnInput: true);
         }
+
+        [Fact]
+        public void Unbox()
+        {
+            CheckPaths(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static int Test(object input) {
+        return (int)input;
+    }
+}", inputMustBeNonNull: true);
+        }
+
+        [Fact]
+        public void UnboxNullable()
+        {
+            CheckPaths(@"
+using System;
+using System.Linq;
+using System.Collections.Generic;
+class Program {
+    public static int? Test(object input) {
+        return (int?)input;
+    }
+}", inputMustBeNonNull: false);
+        }
     }
 }

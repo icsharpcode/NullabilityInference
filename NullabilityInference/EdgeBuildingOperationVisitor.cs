@@ -1277,8 +1277,15 @@ namespace ICSharpCode.NullabilityInference
                 var returnType = typeSystem.GetSymbolType(method.OriginalDefinition);
                 returnType = returnType.WithSubstitution(method.ReturnType, substitution);
                 CreateCastEdge(returnType, target, label);
-            } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing || conv.IsPointer) {
+            } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsPointer) {
                 CreateCastEdge(input, target, label);
+            } else if (conv.IsUnboxing) {
+                if (target.Type?.IsSystemNullable() == true) {
+                    CreateCastEdge(input, target.WithNode(typeSystem.NullableNode), label);
+                } else {
+                    // unboxing to a non-nullable type requires a non-null box
+                    CreateCastEdge(input, target.WithNode(typeSystem.NonNullNode), label);
+                }
             } else if (conv.IsDefaultLiteral) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(input.Type, target.Type));
                 tsBuilder.CreateTypeEdge(input, target, null, VarianceKind.None, label);
