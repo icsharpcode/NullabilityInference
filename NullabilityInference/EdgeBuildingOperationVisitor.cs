@@ -1321,6 +1321,20 @@ namespace ICSharpCode.NullabilityInference
             return target;
         }
 
+        public override TypeWithNode VisitCoalesceAssignment(ICoalesceAssignmentOperation operation, EdgeBuildingContext argument)
+        {
+            // target ??= value;
+            var target = Visit(operation.Target, EdgeBuildingContext.LValue);
+            var flowStateAfterLHS = flowState.SaveSnapshot();
+            var value = Visit(operation.Value, EdgeBuildingContext.Normal);
+            tsBuilder.CreateAssignmentEdge(source: value, target: target, new EdgeLabel("??= Assign", operation));
+            flowState.JoinWith(flowStateAfterLHS, tsBuilder, new EdgeLabel("??= short-circuit", operation));
+            if (AccessPath.FromOperation(operation.Target) is AccessPath targetPath) {
+                flowState.SetNode(targetPath, value.Node, clearMembers: true);
+            }
+            return target;
+        }
+
         public override TypeWithNode VisitEventAssignment(IEventAssignmentOperation operation, EdgeBuildingContext argument)
         {
             // event += value;

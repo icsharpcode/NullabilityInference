@@ -156,5 +156,18 @@ class DataStructure
     bool IsValid(Node? n) => true;
 }");
         }
+
+        [Fact]
+        public void CoalesceAssign()
+        {
+            CheckPaths(@"
+class Program {
+    public static string Test(string input) {
+        string? a = null;
+        a ??= input;
+        return a;
+    }
+}", returnNullable: false, returnDependsOnInput: true);
+        }
     }
 }
