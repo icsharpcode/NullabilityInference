@@ -207,6 +207,35 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitSwitchExpression(ISwitchExpressionOperation operation, EdgeBuildingContext argument)
+        {
+            var returnType = tsBuilder.CreateTemporaryType(operation.Type);
+            returnType.SetName("switch expr");
+            var switchValue = Visit(operation.Value, EdgeBuildingContext.Normal);
+            var onBodyStart = flowState.SaveSnapshot();
+            flowState.MakeUnreachable();
+            var onBodyEnd = flowState.SaveSnapshot();
+            foreach (var arm in operation.Arms) {
+                flowState.RestoreSnapshot(onBodyStart);
+                var pattern = Visit(arm.Pattern, EdgeBuildingContext.Normal);
+                PerformPatternMatch(switchValue, pattern, arm);
+
+                if (arm.Guard != null) {
+                    var (onTrue, onFalse) = VisitCondition(arm.Guard);
+                    flowState.RestoreSnapshot(onTrue);
+                    onBodyEnd = JoinFlowSnapshots(onBodyEnd, onFalse, new EdgeLabel("pattern guard false", arm));
+                }
+
+                var value = Visit(arm.Value, EdgeBuildingContext.Normal);
+                tsBuilder.CreateAssignmentEdge(value, returnType, new EdgeLabel("switch expr arm", arm));
+
+                flowState.JoinWith(onBodyEnd, tsBuilder, new EdgeLabel("end of switch expr arm", arm));
+                onBodyEnd = flowState.SaveSnapshot();
+            }
+            flowState.RestoreSnapshot(onBodyEnd);
+            return returnType;
+        }
+
         public override TypeWithNode VisitTry(ITryOperation operation, EdgeBuildingContext argument)
         {
             operation.Body.Accept(this, EdgeBuildingContext.Normal);
@@ -1585,6 +1614,11 @@ namespace ICSharpCode.NullabilityInference
             } else {
                 return typeSystem.GetObliviousType(operation.Type);
             }
+        }
+
+        public override TypeWithNode VisitDiscardPattern(IDiscardPatternOperation operation, EdgeBuildingContext argument)
+        {
+            return typeSystem.GetObliviousType(operation.Type);
         }
 
         private TypeWithNode currentPatternInput;

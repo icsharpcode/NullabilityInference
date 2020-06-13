@@ -926,5 +926,21 @@ struct Box<T> {
     public static implicit operator T(Box<T> b) { return b.val; }
 }"));
         }
+
+        [Fact]
+        public void SwitchExpression()
+        {
+            CheckPaths(@"
+class Program {
+    static int i;
+    public static string Test(string input) {
+        return i switch {
+            0 => input,
+            1 => string.Empty,
+            _ => null
+        };
+    }
+}", returnNullable: true, returnDependsOnInput: true);
+        }
     }
 }
