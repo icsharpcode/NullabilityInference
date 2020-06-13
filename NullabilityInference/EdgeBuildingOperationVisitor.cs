@@ -360,6 +360,13 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
+        public override TypeWithNode VisitUsingDeclaration(IUsingDeclarationOperation operation, EdgeBuildingContext argument)
+        {
+            // using var x = y;
+            operation.DeclarationGroup.Accept(this, EdgeBuildingContext.Normal);
+            return typeSystem.VoidType;
+        }
+
         public override TypeWithNode VisitLock(ILockOperation operation, EdgeBuildingContext argument)
         {
             var monitor = Visit(operation.LockedValue, EdgeBuildingContext.Normal);
@@ -553,6 +560,14 @@ namespace ICSharpCode.NullabilityInference
             }
 
             return operatorReturnType;
+        }
+
+        public override TypeWithNode VisitTupleBinaryOperator(ITupleBinaryOperation operation, EdgeBuildingContext argument)
+        {
+            // tuple comparison
+            Visit(operation.LeftOperand, EdgeBuildingContext.Normal);
+            Visit(operation.RightOperand, EdgeBuildingContext.Normal);
+            return typeSystem.GetObliviousType(operation.Type);
         }
 
         private bool IsNullLiteral(IOperation operation)
