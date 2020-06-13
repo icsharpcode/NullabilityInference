@@ -24,7 +24,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using ICSharpCode.NullabilityInference;
@@ -66,6 +65,9 @@ Remarks:
 
         [Option("--all-nullable", "Don't run inference, just mark all reference types as nullable.", CommandOptionType.NoValue)]
         public bool AllNullable { get; }
+
+        [Option("-e|--add-nullable-enable", "Add '#nullable enable' to the top of each source file.", CommandOptionType.NoValue)]
+        public bool AddNullableEnable { get; }
 
 #if DEBUG
         [Option("-g|--show-graph", "Show type graph. Requires GraphViz dot.exe in PATH.", CommandOptionType.NoValue)]
@@ -146,10 +148,23 @@ Remarks:
             return 0;
         }
 
-        private static void WriteTree(SyntaxTree tree, CancellationToken cancellationToken)
+        private void WriteTree(SyntaxTree tree, CancellationToken cancellationToken)
         {
             if (string.IsNullOrEmpty(tree.FilePath))
                 return;
+            if (AddNullableEnable) {
+                var root = tree.GetRoot(cancellationToken);
+                if (!root.GetLeadingTrivia().Any(trivia => trivia.IsKind(SyntaxKind.NullableDirectiveTrivia))) {
+                    var newDirective = SyntaxFactory.Trivia(
+                        SyntaxFactory.NullableDirectiveTrivia(
+                            settingToken: SyntaxFactory.Token(SyntaxKind.EnableKeyword).WithLeadingTrivia(SyntaxFactory.Whitespace(" ")),
+                            isActive: true
+                        ).WithTrailingTrivia(SyntaxFactory.EndOfLine(Environment.NewLine))
+                    );
+                    root = root.WithLeadingTrivia(new[] { newDirective }.Concat(root.GetLeadingTrivia()));
+                    tree = tree.WithRootAndOptions(root, tree.Options);
+                }
+            }
             using var stream = new FileStream(tree.FilePath, FileMode.Create, FileAccess.Write);
             using var writer = new StreamWriter(stream, tree.Encoding);
             writer.Write(tree.GetText(cancellationToken));

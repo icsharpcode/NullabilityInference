@@ -25,6 +25,14 @@ Note: this is a work in progress. Many C# constructs will trigger a NotImplement
    * If using the tool on multiple projects; apply the tool in the build order.
    * For the .NET base class library, use .NET Core 3 (or later), or use [ReferenceAssemblyAnnotator](https://github.com/tunnelvisionlabs/ReferenceAssemblyAnnotator).
    * For third-party libraries, consider upgrading to a newer version of the library if that adds nullability annotations.
+ * You can use `#nullable enable` to mark code that you have finished manually reviewing.
+   * The tool will never touch any code after `#nullable enable` or `#nullable disable`. It only modifies code prior to those directives and code after `#nullable restore`.
+   * You can use this to add nullability annotations to your project file-by-file:
+     * Don't use `<Nullable>enable</Nullable>` on the project level
+     * Use the `InferNull --add-nullable-enable` command-line option to let the inference tool add the directive to all files
+     * Use git to revert all changes made by the tool except those to a subset of the files.
+     * Make code changes to that subset of files to fix the remaining warnings.
+     * Commit, then later re-run `InferNull --add-nullable-enable` to work on the next batch of files.
 
 ## The algorithm
 
