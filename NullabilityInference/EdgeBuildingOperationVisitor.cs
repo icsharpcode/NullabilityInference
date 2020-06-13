@@ -1471,7 +1471,11 @@ namespace ICSharpCode.NullabilityInference
                     var outerMethodReturnType = syntaxVisitor.currentMethodReturnType;
                     var outerFlowState = flowState.SaveSnapshot();
                     try {
-                        syntaxVisitor.currentMethodReturnType = delegateReturnType;
+                        if (lambda.Symbol.IsAsync) {
+                            syntaxVisitor.currentMethodReturnType = syntaxVisitor.ExtractTaskReturnType(delegateReturnType);
+                        } else {
+                            syntaxVisitor.currentMethodReturnType = delegateReturnType;
+                        }
                         flowState.Clear();
                         lambda.Body.Accept(this, EdgeBuildingContext.Normal);
                     } finally {

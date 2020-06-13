@@ -310,6 +310,21 @@ static class Program {
         }
 
         [Fact]
+        public void CallAsyncLambda()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System;
+using System.Threading.Tasks;
+static class Program {
+    public static string Test(string input) {
+        Func<string, Task<string>> identity = async input => input;
+
+        return identity(input).Result;
+    }
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"

@@ -234,13 +234,18 @@ namespace ICSharpCode.NullabilityInference
         {
             var returnType = typeSystem.GetSymbolType(method);
             if (method.IsAsync) {
-                if (returnType.TypeArguments.Count == 0) {
-                    returnType = typeSystem.VoidType;
-                } else {
-                    returnType = returnType.TypeArguments.Single();
-                }
+                returnType = ExtractTaskReturnType(returnType);
             }
             return returnType;
+        }
+
+        internal TypeWithNode ExtractTaskReturnType(TypeWithNode taskType)
+        {
+            if (taskType.TypeArguments.Count == 0) {
+                return typeSystem.VoidType;
+            } else {
+                return taskType.TypeArguments.Single();
+            }
         }
 
         public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
