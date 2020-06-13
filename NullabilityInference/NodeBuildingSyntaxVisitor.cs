@@ -48,6 +48,19 @@ namespace ICSharpCode.NullabilityInference
             nodes.Add(syntax, nullNode);
             return nullNode;
         }
+
+        /// <summary>
+        /// NodeBuildingSyntaxVisitor visits trivia but EdgeBuildingSyntaxVisitor doesn't,
+        /// so we store the list of CrefSyntax nodes that we will need to handle during edge-building.
+        /// </summary>
+        private readonly List<NameMemberCrefSyntax> crefSyntaxes = new List<NameMemberCrefSyntax>();
+
+        internal void AddCrefNode(NameMemberCrefSyntax node)
+        {
+            crefSyntaxes.Add(node);
+        }
+
+        internal IEnumerable<NameMemberCrefSyntax> CrefSyntaxes => crefSyntaxes;
     }
 
     /// <summary>
@@ -285,6 +298,12 @@ namespace ICSharpCode.NullabilityInference
             }
             node.Default?.Accept(this);
             return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitNameMemberCref(NameMemberCrefSyntax node)
+        {
+            Mapping.AddCrefNode(node);
+            return base.VisitNameMemberCref(node);
         }
 
         public override TypeWithNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)

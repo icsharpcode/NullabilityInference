@@ -152,8 +152,12 @@ namespace ICSharpCode.NullabilityInference
         {
             var semanticModel = compilation.GetSemanticModel(syntaxTree);
             var tsBuilder = new TypeSystem.Builder(typeSystem);
-            var visitor = new EdgeBuildingSyntaxVisitor(semanticModel, typeSystem, tsBuilder, typeSystem.GetMapping(syntaxTree), cancellationToken);
+            var mapping = typeSystem.GetMapping(syntaxTree);
+            var visitor = new EdgeBuildingSyntaxVisitor(semanticModel, typeSystem, tsBuilder, mapping, cancellationToken);
             visitor.Visit(syntaxTree.GetRoot(cancellationToken));
+            foreach (var cref in mapping.CrefSyntaxes) {
+                visitor.HandleCref(cref);
+            }
             lock (typeSystem) {
                 tsBuilder.Flush(typeSystem);
             }

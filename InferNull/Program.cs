@@ -64,6 +64,9 @@ Remarks:
         [Option("-f|--force", "Allow overwriting uncommitted changes", CommandOptionType.NoValue)]
         public bool Force { get; }
 
+        [Option("--all-nullable", "Don't run inference, just mark all reference types as nullable.", CommandOptionType.NoValue)]
+        public bool AllNullable { get; }
+
 #if DEBUG
         [Option("-g|--show-graph", "Show type graph. Requires GraphViz dot.exe in PATH.", CommandOptionType.NoValue)]
         public bool ShowGraph { get; }
@@ -105,6 +108,13 @@ Remarks:
                 return 1;
             }
             compilation = AllNullableSyntaxRewriter.MakeAllReferenceTypesNullable(compilation, cancellationToken);
+            if (AllNullable) {
+                await Console.Error.WriteLineAsync("Writing modified code...");
+                foreach (var tree in compilation.SyntaxTrees) {
+                    WriteTree(tree, cancellationToken);
+                }
+                return 0;
+            }
             bool hasErrors = false;
             foreach (var diag in compilation.GetDiagnostics(cancellationToken)) {
                 if (diag.Severity == DiagnosticSeverity.Error) {
@@ -129,17 +139,20 @@ Remarks:
                 await Console.Error.WriteLineAsync("Analysis successful. Results are discarded due to --dry-run.");
             } else {
                 await Console.Error.WriteLineAsync("Writing modified code...");
-                engine.ConvertSyntaxTrees(cancellationToken).ForAll(tree => {
-                    if (string.IsNullOrEmpty(tree.FilePath))
-                        return;
-                    using var stream = new FileStream(tree.FilePath, FileMode.Create, FileAccess.Write);
-                    using var writer = new StreamWriter(stream, tree.Encoding);
-                    writer.Write(tree.GetText(cancellationToken));
-                });
+                engine.ConvertSyntaxTrees(cancellationToken).ForAll(tree => WriteTree(tree, cancellationToken));
             }
             await Console.Error.WriteLineAsync("Success!");
 
             return 0;
+        }
+
+        private static void WriteTree(SyntaxTree tree, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(tree.FilePath))
+                return;
+            using var stream = new FileStream(tree.FilePath, FileMode.Create, FileAccess.Write);
+            using var writer = new StreamWriter(stream, tree.Encoding);
+            writer.Write(tree.GetText(cancellationToken));
         }
 
         private static async Task<MSBuildWorkspace> CreateWorkspaceAsync(Dictionary<string, string> buildProps)

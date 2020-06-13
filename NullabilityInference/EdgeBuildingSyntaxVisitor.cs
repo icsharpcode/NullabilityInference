@@ -175,6 +175,19 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        internal void HandleCref(NameMemberCrefSyntax cref)
+        {
+            var symbolInfo = semanticModel.GetSymbolInfo(cref, cancellationToken);
+            if (symbolInfo.Symbol is IMethodSymbol method && cref.Parameters != null) {
+                foreach (var (crefParam, param) in cref.Parameters.Parameters.Zip(method.Parameters)) {
+                    var crefType = crefParam.Type.Accept(this);
+                    var symbolType = typeSystem.GetSymbolType(param, ignoreAttributes: true);
+                    // create bidirectional edge between both
+                    typeSystemBuilder.CreateTypeEdge(crefType, symbolType, null, VarianceKind.None, new EdgeLabel("cref", crefParam));
+                }
+            }
+        }
+
         public override TypeWithNode VisitMethodDeclaration(MethodDeclarationSyntax node)
         {
             node.ExplicitInterfaceSpecifier?.Accept(this);

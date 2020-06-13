@@ -1106,8 +1106,6 @@ class Program {
         public void NullablePragma()
         {
             string program = @"
-using System;
-using System.Collections.Generic;
 class Program {
 #nullable enable
     public void A(string x) {}
@@ -1126,8 +1124,6 @@ class Program {
         public void NullablePragmaWithCode()
         {
             string program = @"
-using System;
-using System.Collections.Generic;
 class Program {
 #nullable enable
     public void Test()
@@ -1142,6 +1138,20 @@ class Program {
     public void B(ref string? x) {}
 }";
             AssertNullabilityInference(program, program);
+        }
+
+        [Fact]
+        public void SeeAlsoCref()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public int A(string x, string? y) { return x.Length; }
+
+    /// <seealso cref=""Program""/>
+    /// <seealso cref=""A(string, string?)""/>
+    /// <seealso cref=""Program.A(string, string?)""/>
+    public void B() { }
+}");
         }
     }
 }
