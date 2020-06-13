@@ -1153,5 +1153,16 @@ class Program {
     public void B() { }
 }");
         }
+
+        [Fact]
+        public void AsyncMethods()
+        {
+            AssertNullabilityInference(@"
+using System.Threading.Tasks;
+class Program {
+    async Task<string?> GetNull() => null;
+    async Task<string> GetEmpty() => string.Empty;
+}");
+        }
     }
 }

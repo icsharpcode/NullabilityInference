@@ -216,7 +216,7 @@ namespace ICSharpCode.NullabilityInference
                 var symbol = semanticModel.GetDeclaredSymbol(node);
                 if (symbol != null) {
                     CreateOverrideEdge(symbol, symbol.OverriddenMethod);
-                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+                    currentMethodReturnType = GetMethodReturnSymbol(symbol);
                 } else {
                     currentMethodReturnType = typeSystem.VoidType;
                 }
@@ -228,6 +228,19 @@ namespace ICSharpCode.NullabilityInference
             } finally {
                 currentMethodReturnType = outerMethodReturnType;
             }
+        }
+
+        internal TypeWithNode GetMethodReturnSymbol(IMethodSymbol method)
+        {
+            var returnType = typeSystem.GetSymbolType(method);
+            if (method.IsAsync) {
+                if (returnType.TypeArguments.Count == 0) {
+                    returnType = typeSystem.VoidType;
+                } else {
+                    returnType = returnType.TypeArguments.Single();
+                }
+            }
+            return returnType;
         }
 
         public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)

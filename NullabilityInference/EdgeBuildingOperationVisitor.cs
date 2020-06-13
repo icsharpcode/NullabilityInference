@@ -173,7 +173,7 @@ namespace ICSharpCode.NullabilityInference
             var oldFlowState = flowState.SaveSnapshot();
             var outerReturnType = syntaxVisitor.currentMethodReturnType;
             try {
-                syntaxVisitor.currentMethodReturnType = typeSystem.GetSymbolType(operation.Symbol);
+                syntaxVisitor.currentMethodReturnType = syntaxVisitor.GetMethodReturnSymbol(operation.Symbol);
                 flowState.Clear();
                 foreach (var child in operation.Children)
                     child.Accept(this, EdgeBuildingContext.Normal);
@@ -306,6 +306,27 @@ namespace ICSharpCode.NullabilityInference
 
             flowState.Clear();
             return typeSystem.VoidType;
+        }
+
+        public override TypeWithNode VisitAwait(IAwaitOperation operation, EdgeBuildingContext argument)
+        {
+            var awaitableType = Visit(operation.Operation, EdgeBuildingContext.Normal);
+            var awaitInfo = syntaxVisitor.semanticModel.GetAwaitExpressionInfo((AwaitExpressionSyntax)operation.Syntax);
+
+            if (awaitInfo.GetAwaiterMethod == null)
+                throw new NotSupportedException("await without GetAwaiterMethod");
+            var getAwaiterSubstitution = SubstitutionForMemberAccess(awaitableType, awaitInfo.GetAwaiterMethod);
+            var awaiterType = typeSystem.GetSymbolType(awaitInfo.GetAwaiterMethod.OriginalDefinition);
+            awaiterType = awaiterType.WithSubstitution(awaitInfo.GetAwaiterMethod.ReturnType, getAwaiterSubstitution);
+
+            if (awaitInfo.GetResultMethod == null)
+                throw new NotSupportedException("await without GetResultMethod");
+            var getResultSubstitution = SubstitutionForMemberAccess(awaiterType, awaitInfo.GetResultMethod);
+            var resultType = typeSystem.GetSymbolType(awaitInfo.GetResultMethod.OriginalDefinition);
+            resultType = resultType.WithSubstitution(awaitInfo.GetResultMethod.ReturnType, getResultSubstitution);
+
+            return resultType;
+
         }
 
         public override TypeWithNode VisitBranch(IBranchOperation operation, EdgeBuildingContext argument)

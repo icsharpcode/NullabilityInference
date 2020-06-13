@@ -269,6 +269,47 @@ static class Program {
         }
 
         [Fact]
+        public void CallAsyncFunction()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Threading.Tasks;
+static class Program {
+    public static string Test(string input) {
+        return Identity(input).Result;
+    }
+    static async Task<string> Identity(string input) => input;
+}"));
+        }
+
+        [Fact]
+        public void CallAsyncLocalFunction()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Threading.Tasks;
+static class Program {
+    public static string Test(string input) {
+        return Identity(input).Result;
+
+        async Task<string> Identity(string input) => input;
+    }
+}"));
+        }
+
+        [Fact]
+        public void CallAsyncFunctionWithAwait()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Threading.Tasks;
+static class Program {
+    public static string Test(string input) {
+        return Identity1(input).Result;
+    }
+    static async Task<string> Identity1(string input) => await Identity2(input);
+    static async Task<string> Identity2(string input) => input;
+}"));
+        }
+
+        [Fact]
         public void NullCoalescingLeft()
         {
             Assert.False(HasPathFromParameterToReturnType(@"
