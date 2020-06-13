@@ -909,5 +909,22 @@ class Program {
     }
 }"));
         }
+
+        [Fact]
+        public void GenericImplicitOperator()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+using System.Threading.Tasks;
+static class Program {
+    public static string Test(string input) {
+        return new Box<string>(input);
+    }
+}
+struct Box<T> {
+    T val;
+    public Box(T val) { this.val = val; }
+    public static implicit operator T(Box<T> b) { return b.val; }
+}"));
+        }
     }
 }

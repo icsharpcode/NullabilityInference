@@ -1189,13 +1189,21 @@ namespace ICSharpCode.NullabilityInference
         private void CreateConversionEdge(TypeWithNode input, TypeWithNode target, Conversion conv, EdgeLabel label)
         {
             if (conv.IsUserDefined) {
-                var param = conv.MethodSymbol!.Parameters.Single();
-                // TODO: handle operator methods within generic types
-                var paramType = typeSystem.GetSymbolType(param);
+                var method = conv.MethodSymbol;
+                if (method == null)
+                    throw new NotSupportedException("User-defined conversion without MethodSymbol");
+                Debug.Assert(method.FullArity() == 0);
+                TypeWithNode[] classTypeArguments = method.ContainingType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray();
+                var substitution = new TypeSubstitution(classTypeArguments, new TypeWithNode[0]);
+
+                var param = method.Parameters.Single();
+                var paramType = typeSystem.GetSymbolType(param.OriginalDefinition);
+                paramType = paramType.WithSubstitution(param.Type, substitution);
                 CreateCastEdge(input, paramType, label);
 
                 // use return type of user-defined operator as input for the remaining conversion
-                var returnType = typeSystem.GetSymbolType(conv.MethodSymbol);
+                var returnType = typeSystem.GetSymbolType(method.OriginalDefinition);
+                returnType = returnType.WithSubstitution(method.ReturnType, substitution);
                 CreateCastEdge(returnType, target, label);
             } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsUnboxing || conv.IsPointer) {
                 CreateCastEdge(input, target, label);
