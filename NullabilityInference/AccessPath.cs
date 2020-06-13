@@ -84,6 +84,16 @@ namespace ICSharpCode.NullabilityInference
             return new AccessPath(root, list.ToImmutable());
         }
 
+        public static AccessPath? FromRefArgument(IOperation? operation)
+        {
+            // also handle `out var decl`
+            if (operation is IDeclarationExpressionOperation { Expression: ILocalReferenceOperation { Local: var local } }) {
+                return new AccessPath(AccessPathRoot.Local, ImmutableArray.Create<ISymbol>(local));
+            } else {
+                return FromOperation(operation);
+            }
+        }
+
         public override bool Equals(object obj) => obj is AccessPath p && Equals(p);
 
         public override int GetHashCode()

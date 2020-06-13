@@ -133,6 +133,31 @@ class DataStructure
         }
 
         [Fact]
+        public void GetOrCreateNodeWithOutVarDecl()
+        {
+            // 'node' local variable must be nullable, but GetNode return type can be non-nullable.
+            AssertNullabilityInference(@"
+using System.Collections.Generic;
+class DataStructure
+{
+    class Node { }
+
+    Dictionary<string, Node> mapping = new Dictionary<string, Node>();
+
+    Node GetNode(string element)
+    {
+        if (!mapping.TryGetValue(element, out Node? node))
+        {
+            node = new Node();
+            mapping.Add(element, node);
+        }
+        return node;
+    }
+
+}");
+        }
+
+        [Fact]
         public void ConditionalAnd()
         {
             AssertNullabilityInference(@"

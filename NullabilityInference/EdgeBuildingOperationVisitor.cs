@@ -957,7 +957,7 @@ namespace ICSharpCode.NullabilityInference
                 // multiple parameters uses the same nullability nodes for all occurrences.
                 var variance = (param.RefKind.ToVariance(), VarianceKind.In).Combine();
                 tsBuilder.CreateTypeEdge(source: argumentType, target: parameterType, substitution, variance, new EdgeLabel("Argument", arg));
-                if (isLValue && AccessPath.FromOperation(arg.Value) is AccessPath path) {
+                if (isLValue && AccessPath.FromRefArgument(arg.Value) is AccessPath path) {
                     // Processing of the flow-state is delayed until after all arguments were visited.
                     afterCall += delegate {
                         if (invocationContext == EdgeBuildingContext.Condition) {
