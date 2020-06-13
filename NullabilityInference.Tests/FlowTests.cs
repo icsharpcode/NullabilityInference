@@ -65,7 +65,7 @@ class Program {
             // Note: the path from parameter to return doesn't appear in the graph,
             // because the flow-state on the else-branch is <nullable>,
             // and Join(<nullable>, x) directly returns <nullable> without introducing a
-            // temporary node.
+            // helper node.
         }
 
         [Fact]

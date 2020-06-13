@@ -172,5 +172,5 @@ Thus, the example above results in the following graph:
 
 Thus, `n#1`, the type argument `#2` and `a#3` are all marked as nullable. But `b#5` and the type argument `#4` can remain non-nullable.
 
-If the type arguments are not explicitly specified but inferred by the compiler, nullability inference will create additional "temporary nodes" for the graph
+If the type arguments are not explicitly specified but inferred by the compiler, nullability inference will create additional "helper nodes" for the graph
 that are not associated with any syntax. This allows us to construct the edges for the calls in the same way.

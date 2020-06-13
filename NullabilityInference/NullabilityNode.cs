@@ -147,21 +147,24 @@ namespace ICSharpCode.NullabilityInference
         }
     }
 
+    /// <summary>
+    /// A node that does not correspond to any syntactic construct, but is helpful when constructing the graph.
+    /// </summary>
     [DebuggerDisplay("{Name}")]
-    internal sealed class TemporaryNullabilityNode : NullabilityNode
+    internal sealed class HelperNullabilityNode : NullabilityNode
     {
         private static long nextId;
         private readonly long id = Interlocked.Increment(ref nextId);
 
         public override Location? Location => null;
         
-        private string symbolName = "temp";
+        private string symbolName = "helper";
 
         public override string Name => $"<{symbolName}#{id}>";
 
         internal override void SetName(string name)
         {
-            if (symbolName == "temp")
+            if (symbolName == "helper")
                 symbolName = name;
         }
     }

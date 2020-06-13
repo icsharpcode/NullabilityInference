@@ -264,7 +264,7 @@ namespace ICSharpCode.NullabilityInference
         {
             var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
             if (symbol is ILocalSymbol local) {
-                var type = typeSystem.CreateTemporaryType(local.Type);
+                var type = typeSystem.CreateHelperType(local.Type);
                 typeSystem.AddSymbolType(symbol, type);
                 return type;
             } else {
@@ -460,7 +460,7 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode elementType;
             if (node.Type is SimpleNameSyntax { IsVar: true }) {
                 var loopInfo = semanticModel.GetForEachStatementInfo(node);
-                elementType = typeSystem.CreateTemporaryType(loopInfo.ElementType);
+                elementType = typeSystem.CreateHelperType(loopInfo.ElementType);
             } else {
                 elementType = node.Type.Accept(this);
             }

@@ -209,7 +209,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitSwitchExpression(ISwitchExpressionOperation operation, EdgeBuildingContext argument)
         {
-            var returnType = tsBuilder.CreateTemporaryType(operation.Type);
+            var returnType = tsBuilder.CreateHelperType(operation.Type);
             returnType.SetName("switch expr");
             var switchValue = Visit(operation.Value, EdgeBuildingContext.Normal);
             var onBodyStart = flowState.SaveSnapshot();
@@ -449,7 +449,7 @@ namespace ICSharpCode.NullabilityInference
         {
             var (onTrue, onFalse) = VisitCondition(operation.Condition);
 
-            var mergedType = tsBuilder.CreateTemporaryType(operation.Type);
+            var mergedType = tsBuilder.CreateHelperType(operation.Type);
             mergedType.SetName("?:");
 
             flowState.RestoreSnapshot(onTrue);
@@ -656,7 +656,7 @@ namespace ICSharpCode.NullabilityInference
             var lhs = Visit(operation.Value, EdgeBuildingContext.Normal);
             var flowAfterLHS = flowState.SaveSnapshot();
             var rhs = Visit(operation.WhenNull, EdgeBuildingContext.Normal);
-            var result = tsBuilder.CreateTemporaryType(operation.Type);
+            var result = tsBuilder.CreateHelperType(operation.Type);
             result.SetName("??");
             CreateCastEdge(lhs, result, new EdgeLabel("lhs of ??", operation));
             tsBuilder.CreateAssignmentEdge(rhs, result, new EdgeLabel("rhs of ??", operation));
@@ -875,7 +875,7 @@ namespace ICSharpCode.NullabilityInference
             // If there are no syntactic type arguments, create temporary type nodes instead to represent
             // the inferred type arguments.
             if (methodTypeArgNodes == null) {
-                methodTypeArgNodes = targetMethod.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
+                methodTypeArgNodes = targetMethod.TypeArguments.Select(tsBuilder.CreateHelperType).ToArray();
                 for (int i = 0; i < methodTypeArgNodes.Length; i++) {
                     methodTypeArgNodes[i].SetName($"{targetMethod.Name}!!{i}");
                 }
@@ -1039,7 +1039,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitAnonymousObjectCreation(IAnonymousObjectCreationOperation operation, EdgeBuildingContext argument)
         {
-            var newObjectType = tsBuilder.CreateTemporaryType(operation.Type);
+            var newObjectType = tsBuilder.CreateHelperType(operation.Type);
             newObjectType.SetName("AnonymousObject");
             var oldObjectCreationType = currentObjectCreationType;
             try {
@@ -1061,12 +1061,12 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode arrayType;
             if (operation.IsImplicit) {
                 // e.g. call with params array
-                arrayType = tsBuilder.CreateTemporaryType(operation.Type);
+                arrayType = tsBuilder.CreateHelperType(operation.Type);
             } else if (operation.Syntax is ArrayCreationExpressionSyntax syntax) {
                 arrayType = syntax.Type.Accept(syntaxVisitor);
             } else if (operation.Syntax is ImplicitArrayCreationExpressionSyntax) {
                 // implicitly-typed 'new[] { ... }'
-                arrayType = tsBuilder.CreateTemporaryType(operation.Type);
+                arrayType = tsBuilder.CreateHelperType(operation.Type);
             } else {
                 throw new NotImplementedException($"ArrayCreationOperation with syntax={operation.Syntax}");
             }
@@ -1208,7 +1208,7 @@ namespace ICSharpCode.NullabilityInference
                     // for simple casts that don't involve generics.
                     return new TypeWithNode(operation.Type, input.Node);
                 }
-                targetType = tsBuilder.CreateTemporaryType(operation.Type);
+                targetType = tsBuilder.CreateHelperType(operation.Type);
                 targetType.SetName($"{conv}Conversion");
             }
             CreateConversionEdge(input, targetType, conv, new EdgeLabel($"{conv}Conversion", operation));
@@ -1222,7 +1222,7 @@ namespace ICSharpCode.NullabilityInference
                 if (method == null)
                     throw new NotSupportedException("User-defined conversion without MethodSymbol");
                 Debug.Assert(method.FullArity() == 0);
-                TypeWithNode[] classTypeArguments = method.ContainingType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray();
+                TypeWithNode[] classTypeArguments = method.ContainingType.FullTypeArguments().Select(tsBuilder.CreateHelperType).ToArray();
                 var substitution = new TypeSubstitution(classTypeArguments, new TypeWithNode[0]);
 
                 var param = method.Parameters.Single();
@@ -1513,7 +1513,7 @@ namespace ICSharpCode.NullabilityInference
             } else if (operation.Syntax is CastExpressionSyntax castSyntax) {
                 type = castSyntax.Type.Accept(syntaxVisitor);
             } else {
-                type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.FullTypeArguments().Select(tsBuilder.CreateTemporaryType).ToArray());
+                type = new TypeWithNode(operation.Type, typeSystem.NonNullNode, delegateType.FullTypeArguments().Select(tsBuilder.CreateHelperType).ToArray());
             }
             type.SetName("delegate");
             var substitution = new TypeSubstitution(type.TypeArguments, new TypeWithNode[0]);
@@ -1630,7 +1630,7 @@ namespace ICSharpCode.NullabilityInference
                 if (operation.Syntax is RecursivePatternSyntax { Type: { } typeSyntax }) {
                     currentPatternInput = typeSyntax.Accept(syntaxVisitor);
                 } else {
-                    currentPatternInput = tsBuilder.CreateTemporaryType(operation.Type);
+                    currentPatternInput = tsBuilder.CreateHelperType(operation.Type);
                     currentPatternInput.SetName("RecursivePattern");
                 }
                 // Recursive pattern never matches null, so ignore the top-level nullability.

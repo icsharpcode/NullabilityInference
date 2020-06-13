@@ -408,7 +408,7 @@ namespace ICSharpCode.NullabilityInference
             }
 
             private readonly List<Action<TypeSystem>> cachedActions = new List<Action<TypeSystem>>();
-            private readonly List<TemporaryNullabilityNode> newNodes = new List<TemporaryNullabilityNode>();
+            private readonly List<HelperNullabilityNode> newNodes = new List<HelperNullabilityNode>();
             private readonly List<NullabilityEdge> newEdges = new List<NullabilityEdge>();
 
             private void AddAction(Action<TypeSystem> action)
@@ -437,32 +437,32 @@ namespace ICSharpCode.NullabilityInference
             }
 
             /// <summary>
-            /// Create temporary type nodes for the specified type.
+            /// Create helper type nodes for the specified type.
             /// </summary>
-            public TypeWithNode CreateTemporaryType(ITypeSymbol? type)
+            public TypeWithNode CreateHelperType(ITypeSymbol? type)
             {
                 if (type == null)
                     return VoidType;
                 if (type is INamedTypeSymbol nts) {
-                    var typeArgs = nts.FullTypeArguments().Select(CreateTemporaryType).ToArray();
+                    var typeArgs = nts.FullTypeArguments().Select(CreateHelperType).ToArray();
                     if (nts.IsReferenceType) {
-                        return new TypeWithNode(nts, CreateTemporaryNode(), typeArgs);
+                        return new TypeWithNode(nts, CreateHelperNode(), typeArgs);
                     } else {
                         return new TypeWithNode(nts, ObliviousNode, typeArgs);
                     }
                 } else if (type is IArrayTypeSymbol ats) {
-                    return new TypeWithNode(ats, CreateTemporaryNode(), new[] { CreateTemporaryType(ats.ElementType) });
+                    return new TypeWithNode(ats, CreateHelperNode(), new[] { CreateHelperType(ats.ElementType) });
                 } else if (type is IPointerTypeSymbol pts) {
-                    return new TypeWithNode(pts, CreateTemporaryNode(), new[] { CreateTemporaryType(pts.PointedAtType) });
+                    return new TypeWithNode(pts, CreateHelperNode(), new[] { CreateHelperType(pts.PointedAtType) });
                 } else if (type is ITypeParameterSymbol tp && tp.CanBeMadeNullable()) {
-                    return new TypeWithNode(tp, CreateTemporaryNode());
+                    return new TypeWithNode(tp, CreateHelperNode());
                 }
                 return new TypeWithNode(type, ObliviousNode);
             }
 
-            public NullabilityNode CreateTemporaryNode()
+            public NullabilityNode CreateHelperNode()
             {
-                var node = new TemporaryNullabilityNode();
+                var node = new HelperNullabilityNode();
                 newNodes.Add(node);
                 return node;
             }
@@ -489,7 +489,7 @@ namespace ICSharpCode.NullabilityInference
                 if (b.NullType == NullType.Nullable)
                     return b;
 
-                var newNode = CreateTemporaryNode();
+                var newNode = CreateHelperNode();
                 CreateEdge(a, newNode, edgeLabel);
                 CreateEdge(b, newNode, edgeLabel);
                 return newNode;
