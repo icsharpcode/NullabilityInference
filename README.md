@@ -15,7 +15,7 @@ Note: this is a work in progress. Many C# constructs will trigger a NotImplement
 
 ## Tips+Tricks:
 
- * The inference tool will only add/remove `?` annotations on nullable reference types. It will never touch your code in any other way.
+ * The inference tool will only add/remove `?` annotations on nullable reference types. It can also add the `[NotNullWhen]` attribute. It will never touch your code in any other way.
    * Existing `?` annotations on nullable reference types are discarded and inferred again from scratch.
  * Unconstrained generic types are not reference types, and thus will never be annotated by the tool.
  * The inference tool will not introduce any of the [advanced nullability attributes](https://docs.microsoft.com/en-us/dotnet/api/system.diagnostics.codeanalysis).
@@ -215,7 +215,7 @@ and on the existance of code that uses the return value of `Get` without null ch
 
 ```csharp
 01: using System.Collections.Generic;
-02: using System.Diagnostics.CodeAnalysis;
+02: 
 03: class Program
 04: {
 05:     public string someString = "hello";

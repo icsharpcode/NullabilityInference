@@ -201,6 +201,7 @@ class Program {
         {
             string program = @"
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 class DataStructure
 {
     Dictionary<string, string> dict = new Dictionary<string, string>();
@@ -220,6 +221,7 @@ class DataStructure
         {
             string program = @"
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 class DataStructure
 {
     Dictionary<string, string> dict = new Dictionary<string, string>();
@@ -239,6 +241,7 @@ class DataStructure
         {
             string program = @"
 using System.Collections.Generic;
+[using]
 class DataStructure
 {
     public bool TryGet(int i, [Attr] out string? name)
@@ -253,8 +256,8 @@ class DataStructure
     }
 }";
             AssertNullabilityInference(
-                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]"),
-                inputProgram: program.Replace("[Attr] ", ""));
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]").Replace("[using]", "using System.Diagnostics.CodeAnalysis;"),
+                inputProgram: program.Replace("[Attr] ", "").Replace("[using]", ""));
         }
     }
 }

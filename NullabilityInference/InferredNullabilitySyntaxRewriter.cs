@@ -134,7 +134,27 @@ namespace ICSharpCode.NullabilityInference
                         SyntaxFactory.AttributeArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.AttributeArgument(attrArgument))));
                     var newAttributeList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(newAttribute));
                     node = node.AddAttributeLists(newAttributeList.WithTrailingTrivia(SyntaxFactory.Space));
+                    needsUsingCodeAnalysis = true;
                 }
+            }
+            return node;
+        }
+
+        private bool needsUsingCodeAnalysis;
+
+        public override SyntaxNode? VisitCompilationUnit(CompilationUnitSyntax node)
+        {
+            bool hasUsingCodeAnalysis = false;
+            foreach (var u in node.Usings) {
+                var symbolInfo = semanticModel.GetSymbolInfo(u.Name, cancellationToken);
+                if (symbolInfo.Symbol is INamespaceSymbol ns && ns.GetFullName() == "System.Diagnostics.CodeAnalysis") {
+                    hasUsingCodeAnalysis = true;
+                }
+            }
+            node = (CompilationUnitSyntax)base.VisitCompilationUnit(node)!;
+            if (needsUsingCodeAnalysis && !hasUsingCodeAnalysis) {
+                var qname = SyntaxFactory.QualifiedName(SyntaxFactory.QualifiedName(SyntaxFactory.IdentifierName("System"), SyntaxFactory.IdentifierName("Diagnostics")), SyntaxFactory.IdentifierName("CodeAnalysis"));
+                node = node.AddUsings(SyntaxFactory.UsingDirective(qname.WithLeadingTrivia(SyntaxFactory.Space)));
             }
             return node;
         }
