@@ -293,7 +293,7 @@ namespace ICSharpCode.NullabilityInference
                     parameterTypes.Add(symbol, type);
                     typeSystem.AddSymbolType(symbol, type);
 
-                    if (symbol.RefKind == RefKind.Out && (symbol.ContainingSymbol as IMethodSymbol)?.EffectiveReturnType().SpecialType == SpecialType.System_Boolean) {
+                    if (symbol.RefKind == RefKind.Out && CanUseOutParamFlow(symbol.ContainingSymbol as IMethodSymbol)) {
                         typeSystem.RegisterOutParamFlowNodes(symbol);
                     }
                 }
@@ -301,6 +301,19 @@ namespace ICSharpCode.NullabilityInference
             node.Default?.Accept(this);
             return typeSystem.VoidType;
         }
+
+        private bool CanUseOutParamFlow(IMethodSymbol? method)
+        {
+            if (method == null)
+                return false;
+            if (method.ContainingSymbol is IMethodSymbol) {
+                var compilation = (CSharpCompilation)semanticModel.Compilation;
+                if (compilation.LanguageVersion <= LanguageVersion.CSharp8)
+                    return false; // C# 8 does not support attributes on local function parameters
+            }
+            return method.EffectiveReturnType().SpecialType == SpecialType.System_Boolean;
+        }
+        
 
         public override TypeWithNode VisitNameMemberCref(NameMemberCrefSyntax node)
         {
