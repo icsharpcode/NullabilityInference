@@ -559,6 +559,54 @@ class Program {
         }
 
         [Fact]
+        public void TupleItemAccess1()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var tuple = (input, string.Empty);
+        return tuple.Item1;
+    }
+}"));
+        }
+
+        [Fact]
+        public void TupleItemAccess2()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var tuple = (input, string.Empty);
+        return tuple.Item2;
+    }
+}"));
+        }
+
+        [Fact]
+        public void TupleNamedItemAccess1()
+        {
+            Assert.True(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var tuple = (input, string.Empty);
+        return tuple.input;
+    }
+}"));
+        }
+
+        [Fact]
+        public void TupleNamedItemAccess2()
+        {
+            Assert.False(HasPathFromParameterToReturnType(@"
+class Program {
+    public static string Test(string input) {
+        var tuple = (input, string.Empty);
+        return tuple.Empty;
+    }
+}"));
+        }
+
+        [Fact]
         public void LambdaImplicitlyTyped()
         {
             Assert.True(HasPathFromParameterToReturnType(@"

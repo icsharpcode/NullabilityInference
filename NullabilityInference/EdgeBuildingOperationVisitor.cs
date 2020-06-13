@@ -728,10 +728,14 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitFieldReference(IFieldReferenceOperation operation, EdgeBuildingContext argument)
         {
+            IFieldSymbol field = operation.Field;
+            field = field.CorrespondingTupleField ?? field;
+            // field.OriginalDefinition only works as expected when we're using the underlying tuple field
+
             TypeWithNode? receiverType = GetReceiverType(operation);
-            var substitution = SubstitutionForMemberAccess(receiverType, operation.Field);
-            var fieldType = typeSystem.GetSymbolType(operation.Field.OriginalDefinition);
-            fieldType = fieldType.WithSubstitution(operation.Field.Type, substitution);
+            var substitution = SubstitutionForMemberAccess(receiverType, field);
+            var fieldType = typeSystem.GetSymbolType(field.OriginalDefinition);
+            fieldType = fieldType.WithSubstitution(field.Type, substitution);
             if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
                 fieldType = fieldType.WithFlowState(flowNode, flowLabel);
             }
