@@ -1475,7 +1475,7 @@ namespace ICSharpCode.NullabilityInference
         {
             var lhs = Visit(operation.Target, EdgeBuildingContext.LValue);
             var rhs = Visit(operation.Value, EdgeBuildingContext.Normal);
-            if (lhs.Type?.IsTupleType == true) {
+            if (lhs.Type?.IsTupleType == true && rhs.Type?.IsTupleType == true) {
                 Debug.Assert(lhs.TypeArguments.Count == rhs.TypeArguments.Count);
                 foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhs.TypeArguments)) {
                     tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement, new EdgeLabel("DeconstructionAssign", operation));
@@ -1486,7 +1486,7 @@ namespace ICSharpCode.NullabilityInference
                 }
                 return rhs;
             } else {
-                throw new NotImplementedException("DeconstructionAssignment for non-tuple");
+                throw new NotImplementedException("DeconstructionAssignment for non-tuple near " + operation.Syntax?.GetLocation().StartPosToString());
             }
         }
 

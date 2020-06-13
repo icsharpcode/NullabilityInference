@@ -197,6 +197,7 @@ namespace ICSharpCode.NullabilityInference
                 case SyntaxKind.QualifiedCref:  // <seealso cref="Program.A"/>
                 case SyntaxKind.NameMemberCref: // <seealso cref="Program"/>
                 case SyntaxKind.TypeCref:
+                case SyntaxKind.XmlNameAttribute: // <typeparam name='T'>
                 case SyntaxKind.SimpleMemberAccessExpression: // Console?.WriteLine
                 case SyntaxKind.SimpleBaseType: // : IDisposable?
                 case SyntaxKind.AsExpression: // x as string?
