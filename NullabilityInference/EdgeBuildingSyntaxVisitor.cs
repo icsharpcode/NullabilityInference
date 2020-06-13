@@ -138,9 +138,9 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        protected override NullabilityNode GetMappedNode(TypeSyntax node)
+        protected override NullabilityNode GetMappedNode(TypeSyntax syntax)
         {
-            return mapping[node];
+            return mapping[syntax];
         }
 
         internal TypeWithNode currentMethodReturnType;

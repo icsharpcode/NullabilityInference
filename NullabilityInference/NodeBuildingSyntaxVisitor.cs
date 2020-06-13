@@ -76,10 +76,44 @@ namespace ICSharpCode.NullabilityInference
         {
             cancellationToken.ThrowIfCancellationRequested();
             Debug.Assert(!(node is TypeSyntax));
-            foreach (var child in node.ChildNodes()) {
-                Visit(child);
+            foreach (var child in node.ChildNodesAndTokens()) {
+                if (child.IsNode) {
+                    Visit(child.AsNode());
+                } else {
+                    VisitToken(child.AsToken());
+                }
             }
             return typeSystem.VoidType;
+        }
+
+        private void VisitToken(SyntaxToken token)
+        {
+            if (token.HasStructuredTrivia) {
+                foreach (var trivia in token.GetAllTrivia()) {
+                    Visit(trivia.GetStructure());
+                }
+            }
+        }
+
+        private enum NullableMode
+        {
+            Infer,
+            Enable,
+            Disable
+        }
+
+        private NullableMode currentMode = NullableMode.Infer;
+
+        public override TypeWithNode VisitNullableDirectiveTrivia(NullableDirectiveTriviaSyntax node)
+        {
+            if (node.SettingToken.IsKind(SyntaxKind.RestoreKeyword)) {
+                currentMode = NullableMode.Infer;
+            } else if (node.SettingToken.IsKind(SyntaxKind.EnableKeyword)) {
+                currentMode = NullableMode.Enable;
+            } else if (node.SettingToken.IsKind(SyntaxKind.DisableKeyword)) {
+                currentMode = NullableMode.Disable;
+            }
+            return base.VisitNullableDirectiveTrivia(node);
         }
 
         private readonly Dictionary<IAliasSymbol, TypeWithNode> aliases = new Dictionary<IAliasSymbol, TypeWithNode>();
@@ -87,6 +121,8 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitUsingDirective(UsingDirectiveSyntax node)
         {
             if (node.Alias != null) {
+                VisitToken(node.UsingKeyword);
+                VisitToken(node.StaticKeyword);
                 var type = node.Name.Accept(this);
                 var alias = semanticModel.GetDeclaredSymbol(node, cancellationToken);
                 if (alias != null) {
@@ -111,7 +147,7 @@ namespace ICSharpCode.NullabilityInference
                     typeArgs = InheritOuterTypeArguments(typeArgs, ty);
                 }
                 if (ty.CanBeMadeNullable() && CanBeMadeNullableSyntax(node)) {
-                    return new TypeWithNode(ty, Mapping.CreateNewNode(node), typeArgs);
+                    return new TypeWithNode(ty, GetMappedNode(node), typeArgs);
                 } else {
                     return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                 }
@@ -119,9 +155,18 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
-        protected override NullabilityNode GetMappedNode(TypeSyntax node)
+        protected override NullabilityNode GetMappedNode(TypeSyntax syntax)
         {
-            return Mapping.CreateNewNode(node);
+            var node = Mapping.CreateNewNode(syntax);
+            if (currentMode == NullableMode.Enable) {
+                if (syntax.Parent is NullableTypeSyntax)
+                    node.ReplaceWith(typeSystem.NullableNode);
+                else
+                    node.ReplaceWith(typeSystem.NonNullNode);
+            } else if (currentMode == NullableMode.Disable) {
+                node.ReplaceWith(typeSystem.ObliviousNode);
+            }
+            return node;
         }
 
         public override TypeWithNode VisitVariableDeclaration(VariableDeclarationSyntax node)
@@ -230,6 +275,10 @@ namespace ICSharpCode.NullabilityInference
                 var type = node.Type.Accept(this);
                 var symbol = semanticModel.GetDeclaredSymbol(node, cancellationToken);
                 if (symbol != null) {
+                    var nodeFromAttributes = typeSystem.FromAttributes(symbol.GetAttributes());
+                    if (nodeFromAttributes != null) {
+                        type = type.WithNode(nodeFromAttributes);
+                    }
                     parameterTypes.Add(symbol, type);
                     typeSystem.AddSymbolType(symbol, type);
                 }
@@ -293,6 +342,12 @@ namespace ICSharpCode.NullabilityInference
         {
             var outerMember = currentMember;
             try {
+
+                foreach (var trivia in node.GetLeadingTrivia()) {
+                    if (trivia.HasStructure) {
+                        Visit(trivia.GetStructure());
+                    }
+                }
                 currentMember = semanticModel.GetDeclaredSymbol(node, cancellationToken);
                 if (typeSyntax != null) {
                     var returnType = typeSyntax.Accept(this);

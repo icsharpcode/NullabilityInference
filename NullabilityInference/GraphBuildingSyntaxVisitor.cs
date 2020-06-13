@@ -132,7 +132,7 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        protected abstract NullabilityNode GetMappedNode(TypeSyntax node);
+        protected abstract NullabilityNode GetMappedNode(TypeSyntax syntax);
 
         public override TypeWithNode VisitArrayType(ArrayTypeSyntax node)
         {

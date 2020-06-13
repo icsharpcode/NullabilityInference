@@ -51,9 +51,18 @@ namespace ICSharpCode.NullabilityInference
         private readonly CancellationToken cancellationToken;
 
         private AllNullableSyntaxRewriter(SemanticModel semanticModel, CancellationToken cancellationToken)
+            : base(visitIntoStructuredTrivia: true)
         {
             this.semanticModel = semanticModel;
             this.cancellationToken = cancellationToken;
+        }
+
+        private bool isActive = true;
+
+        public override SyntaxNode? VisitNullableDirectiveTrivia(NullableDirectiveTriviaSyntax node)
+        {
+            isActive = node.SettingToken.IsKind(SyntaxKind.RestoreKeyword);
+            return base.VisitNullableDirectiveTrivia(node);
         }
 
         public override SyntaxNode? VisitIdentifierName(IdentifierNameSyntax node)
@@ -106,7 +115,7 @@ namespace ICSharpCode.NullabilityInference
 
         private bool CanBeMadeNullableSyntax(TypeSyntax node)
         {
-            return GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && !(node.Parent is NullableTypeSyntax);
+            return isActive && GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && !(node.Parent is NullableTypeSyntax);
         }
     }
 }

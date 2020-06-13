@@ -1101,5 +1101,47 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void NullablePragma()
+        {
+            string program = @"
+using System;
+using System.Collections.Generic;
+class Program {
+#nullable enable
+    public void A(string x) {}
+    public void B(string? x) {}
+#nullable disable
+    public void C(string x) {}
+#nullable restore
+    public void D(string x) => A(x);
+    public void E(string? x) => B(x);
+    public void F(string? x) => C(x);
+}";
+            AssertNullabilityInference(program, program);
+        }
+
+        [Fact]
+        public void NullablePragmaWithCode()
+        {
+            string program = @"
+using System;
+using System.Collections.Generic;
+class Program {
+#nullable enable
+    public void Test()
+    {
+        string a = string.Empty; 
+        string? b = null;
+        A(ref a);
+        B(ref b);
+    }
+#nullable restore
+    public void A(ref string x) {}
+    public void B(ref string? x) {}
+}";
+            AssertNullabilityInference(program, program);
+        }
     }
 }

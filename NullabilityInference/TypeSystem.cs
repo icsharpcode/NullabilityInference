@@ -29,6 +29,20 @@ namespace ICSharpCode.NullabilityInference
 {
     public sealed class TypeSystem
     {
+        private readonly struct SpecialNodes
+        {
+            public readonly NullabilityNode NullableNode;
+            public readonly NullabilityNode NonNullNode;
+            public readonly NullabilityNode ObliviousNode;
+
+            public SpecialNodes(NullabilityNode nullableNode, NullabilityNode nonNullNode, NullabilityNode obliviousNode)
+            {
+                this.NullableNode = nullableNode;
+                this.NonNullNode = nonNullNode;
+                this.ObliviousNode = obliviousNode;
+            }
+        }
+
         public NullabilityNode NullableNode { get; } = new SpecialNullabilityNode(NullType.Nullable);
         public NullabilityNode NonNullNode { get; } = new SpecialNullabilityNode(NullType.NonNull);
         public NullabilityNode ObliviousNode { get; } = new SpecialNullabilityNode(NullType.Oblivious);
@@ -124,24 +138,29 @@ namespace ICSharpCode.NullabilityInference
             return false;
         }
 
-        internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability, ImmutableArray<AttributeData> attributeData = default)
+        private static NullabilityNode? FromAttributes(ImmutableArray<AttributeData> attributeData, in SpecialNodes specialNodes)
         {
-            var topLevelNode = nullability switch
-            {
-                NullableAnnotation.Annotated => NullableNode,
-                NullableAnnotation.NotAnnotated => NonNullNode,
-                _ => ObliviousNode,
-            };
             if (!attributeData.IsDefaultOrEmpty) {
                 foreach (var attr in attributeData) {
                     switch (attr.AttributeClass?.GetFullName()) {
                         case "System.Diagnostics.CodeAnalysis.MaybeNullAttribute":
                         case "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute":
-                            topLevelNode = NullableNode;
-                            break;
+                            return specialNodes.NullableNode;
                     }
                 }
             }
+            return null;
+        }
+
+        internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability, ImmutableArray<AttributeData> attributeData = default)
+        {
+            var topLevelNode = FromAttributes(attributeData, new SpecialNodes(NullableNode, NonNullNode, ObliviousNode));
+            topLevelNode ??= nullability switch
+            {
+                NullableAnnotation.Annotated => NullableNode,
+                NullableAnnotation.NotAnnotated => NonNullNode,
+                _ => ObliviousNode,
+            };
             if (type is INamedTypeSymbol nts) {
                 return new TypeWithNode(nts, topLevelNode, nts.FullTypeArguments().Zip(nts.FullTypeArgumentNullableAnnotations(), (a, b) => FromType(a, b)).ToArray());
             } else if (type is IArrayTypeSymbol ats) {
@@ -366,6 +385,11 @@ namespace ICSharpCode.NullabilityInference
                 this.NonNullNode = typeSystem.NonNullNode;
                 this.ObliviousNode = typeSystem.ObliviousNode;
                 this.VoidType = typeSystem.VoidType;
+            }
+
+            internal NullabilityNode FromAttributes(ImmutableArray<AttributeData> attributeData)
+            {
+                return TypeSystem.FromAttributes(attributeData, new SpecialNodes(NullableNode, NonNullNode, ObliviousNode));
             }
 
             public void AddSymbolType(ISymbol symbol, TypeWithNode type)

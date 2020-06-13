@@ -33,10 +33,19 @@ namespace ICSharpCode.NullabilityInference
         private readonly CancellationToken cancellationToken;
 
         public InferredNullabilitySyntaxRewriter(SemanticModel semanticModel, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
+            : base(visitIntoStructuredTrivia: true)
         {
             this.semanticModel = semanticModel;
             this.mapping = mapping;
             this.cancellationToken = cancellationToken;
+        }
+
+        private bool isActive = true;
+
+        public override SyntaxNode? VisitNullableDirectiveTrivia(NullableDirectiveTriviaSyntax node)
+        {
+            isActive = node.SettingToken.IsKind(SyntaxKind.RestoreKeyword);
+            return base.VisitNullableDirectiveTrivia(node);
         }
 
         public override SyntaxNode? VisitNullableType(NullableTypeSyntax node)
@@ -45,7 +54,7 @@ namespace ICSharpCode.NullabilityInference
             if (elementType == null)
                 return null;
             var symbolInfo = semanticModel.GetSymbolInfo(node);
-            if (symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true }) {
+            if (isActive && symbolInfo.Symbol is ITypeSymbol { IsReferenceType: true }) {
                 // Remove existing nullable reference types
                 return elementType.WithTrailingTrivia(node.GetTrailingTrivia());
             } else {
@@ -75,7 +84,7 @@ namespace ICSharpCode.NullabilityInference
 
         private SyntaxNode? HandleTypeName(TypeSyntax node, SyntaxNode? newNode)
         {
-            if (!GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node)) {
+            if (!isActive || !GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node)) {
                 return newNode;
             }
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
@@ -94,7 +103,7 @@ namespace ICSharpCode.NullabilityInference
         public override SyntaxNode? VisitArrayType(ArrayTypeSyntax node)
         {
             var newNode = base.VisitArrayType(node);
-            if (GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && newNode is TypeSyntax newTypeSyntax) {
+            if (isActive && GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && newNode is TypeSyntax newTypeSyntax) {
                 var nullNode = mapping[node];
                 if (nullNode.NullType == NullType.Nullable) {
                     return SyntaxFactory.NullableType(
