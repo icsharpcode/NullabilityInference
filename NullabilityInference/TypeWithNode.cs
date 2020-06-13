@@ -80,27 +80,32 @@ namespace ICSharpCode.NullabilityInference
         /// 
         /// newType must be the result of applying the substitution to this.Type.
         /// </summary>
-        internal TypeWithNode WithSubstitution(ITypeSymbol newType, TypeSubstitution subst)
+        internal TypeWithNode WithSubstitution(ITypeSymbol newType, TypeSubstitution subst, TypeSystem.Builder? tsBuilder)
         {
             if (this.Type is ITypeParameterSymbol tp) {
                 var substituted = subst[tp.TypeParameterKind, tp.FullOrdinal()];
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(substituted.Type, newType));
-                return substituted;
+                if (tsBuilder != null) {
+                    var newNode = tsBuilder.Join(substituted.Node, this.Node, new EdgeLabel());
+                    return substituted.WithNode(newNode);
+                } else {
+                    return substituted;
+                }
             } else if (this.Type is INamedTypeSymbol thisNamedTypeSymbol && newType is INamedTypeSymbol newNamedTypeSymbol) {
                 Debug.Assert(SymbolEqualityComparer.Default.Equals(thisNamedTypeSymbol.OriginalDefinition, newNamedTypeSymbol.OriginalDefinition));
                 Debug.Assert(newNamedTypeSymbol.FullArity() == this.TypeArguments.Count);
                 TypeWithNode[] newTypeArgs = new TypeWithNode[this.TypeArguments.Count];
                 var newNamedTypeSymbolTypeArguments = newNamedTypeSymbol.FullTypeArguments().ToList();
                 for (int i = 0; i < newTypeArgs.Length; i++) {
-                    newTypeArgs[i] = this.TypeArguments[i].WithSubstitution(newNamedTypeSymbolTypeArguments[i], subst);
+                    newTypeArgs[i] = this.TypeArguments[i].WithSubstitution(newNamedTypeSymbolTypeArguments[i], subst, tsBuilder);
                 }
                 return new TypeWithNode(newType, this.Node, newTypeArgs);
             } else if (this.Type is IArrayTypeSymbol thisArrayTypeSymbol && newType is IArrayTypeSymbol newArrayTypeSymbol) {
                 Debug.Assert(thisArrayTypeSymbol.Rank == newArrayTypeSymbol.Rank);
-                var elementType = this.TypeArguments.Single().WithSubstitution(newArrayTypeSymbol.ElementType, subst);
+                var elementType = this.TypeArguments.Single().WithSubstitution(newArrayTypeSymbol.ElementType, subst, tsBuilder);
                 return new TypeWithNode(newType, this.Node, new[] { elementType });
             } else if (this.Type is IPointerTypeSymbol && newType is IPointerTypeSymbol newPointerTypeSymbol) {
-                var pointedAtType = this.TypeArguments.Single().WithSubstitution(newPointerTypeSymbol.PointedAtType, subst);
+                var pointedAtType = this.TypeArguments.Single().WithSubstitution(newPointerTypeSymbol.PointedAtType, subst, tsBuilder);
                 return new TypeWithNode(newType, this.Node, new[] { pointedAtType });
             }
             return new TypeWithNode(newType, this.Node);

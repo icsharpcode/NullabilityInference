@@ -239,7 +239,7 @@ namespace ICSharpCode.NullabilityInference
             if (!baseTypes.TryGetValue((derivedTypeDef, baseType), out var typeWithNode)) {
                 typeWithNode = FromType(baseType, NullableAnnotation.None);
             }
-            return typeWithNode.WithSubstitution(baseTypeInstance, substitution);
+            return typeWithNode.WithSubstitution(baseTypeInstance, substitution, null);
         }
 
         /// <summary>

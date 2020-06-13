@@ -317,14 +317,14 @@ namespace ICSharpCode.NullabilityInference
                     throw new NotSupportedException("foreach loop without GetEnumeratorMethod");
                 var getEnumeratorSubstitution = SubstitutionForMemberAccess(collection, loopInfo.GetEnumeratorMethod);
                 var enumeratorType = typeSystem.GetSymbolType(loopInfo.GetEnumeratorMethod.OriginalDefinition);
-                enumeratorType = enumeratorType.WithSubstitution(loopInfo.GetEnumeratorMethod.ReturnType, getEnumeratorSubstitution);
+                enumeratorType = enumeratorType.WithSubstitution(loopInfo.GetEnumeratorMethod.ReturnType, getEnumeratorSubstitution, tsBuilder);
 
                 // Determine the element type (which might have nullabilities dependent on type arguments from the enumerator type)
                 if (loopInfo.CurrentProperty == null)
                     throw new NotSupportedException("foreach loop without CurrentProperty");
                 var getCurrentSubstitution = SubstitutionForMemberAccess(enumeratorType, loopInfo.CurrentProperty);
                 elementType = typeSystem.GetSymbolType(loopInfo.CurrentProperty.OriginalDefinition);
-                elementType = elementType.WithSubstitution(loopInfo.CurrentProperty.Type, getCurrentSubstitution);
+                elementType = elementType.WithSubstitution(loopInfo.CurrentProperty.Type, getCurrentSubstitution, tsBuilder);
             }
 
             flowState.Clear();
@@ -348,13 +348,13 @@ namespace ICSharpCode.NullabilityInference
             }
             var getAwaiterSubstitution = SubstitutionForMemberAccess(awaitableType, awaitInfo.GetAwaiterMethod);
             var awaiterType = typeSystem.GetSymbolType(awaitInfo.GetAwaiterMethod.OriginalDefinition);
-            awaiterType = awaiterType.WithSubstitution(awaitInfo.GetAwaiterMethod.ReturnType, getAwaiterSubstitution);
+            awaiterType = awaiterType.WithSubstitution(awaitInfo.GetAwaiterMethod.ReturnType, getAwaiterSubstitution, tsBuilder);
 
             if (awaitInfo.GetResultMethod == null)
                 throw new NotSupportedException("await without GetResultMethod");
             var getResultSubstitution = SubstitutionForMemberAccess(awaiterType, awaitInfo.GetResultMethod);
             var resultType = typeSystem.GetSymbolType(awaitInfo.GetResultMethod.OriginalDefinition);
-            resultType = resultType.WithSubstitution(awaitInfo.GetResultMethod.ReturnType, getResultSubstitution);
+            resultType = resultType.WithSubstitution(awaitInfo.GetResultMethod.ReturnType, getResultSubstitution, tsBuilder);
 
             return resultType;
 
@@ -806,7 +806,7 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode? receiverType = GetReceiverType(operation);
             var substitution = SubstitutionForMemberAccess(receiverType, field);
             var fieldType = typeSystem.GetSymbolType(field.OriginalDefinition);
-            fieldType = fieldType.WithSubstitution(field.Type, substitution);
+            fieldType = fieldType.WithSubstitution(field.Type, substitution, tsBuilder);
             if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
                 fieldType = fieldType.WithFlowState(flowNode, flowLabel);
             }
@@ -833,7 +833,7 @@ namespace ICSharpCode.NullabilityInference
                 propertyType = substitution.ClassTypeArguments[propIndex];
             } else {
                 propertyType = typeSystem.GetSymbolType(operation.Property.OriginalDefinition);
-                propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution);
+                propertyType = propertyType.WithSubstitution(operation.Property.Type, substitution, tsBuilder);
             }
             if (argument != EdgeBuildingContext.LValue && TryGetFlowState(operation, out var flowNode, out var flowLabel)) {
                 propertyType = propertyType.WithFlowState(flowNode, flowLabel);
@@ -846,7 +846,7 @@ namespace ICSharpCode.NullabilityInference
             TypeWithNode? receiverType = GetReceiverType(operation);
             var substitution = SubstitutionForMemberAccess(receiverType, operation.Event);
             var eventType = typeSystem.GetSymbolType(operation.Event.OriginalDefinition);
-            eventType = eventType.WithSubstitution(operation.Event.Type, substitution);
+            eventType = eventType.WithSubstitution(operation.Event.Type, substitution, tsBuilder);
             return eventType;
         }
 
@@ -891,7 +891,7 @@ namespace ICSharpCode.NullabilityInference
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
             var argumentTypes = HandleArguments(substitution, operation.Arguments, invocationContext: argument);
             var returnType = typeSystem.GetSymbolType(targetMethod.OriginalDefinition);
-            returnType = returnType.WithSubstitution(targetMethod.ReturnType, substitution);
+            returnType = returnType.WithSubstitution(targetMethod.ReturnType, substitution, tsBuilder);
 
             if (typeSystem.GetNotNullIfNotNullParam(operation.TargetMethod.OriginalDefinition) is { } notNullParam) {
                 returnType = returnType.WithNode(argumentTypes[notNullParam.Ordinal].Node);
@@ -943,7 +943,7 @@ namespace ICSharpCode.NullabilityInference
             Debug.Assert(operation.Method.Parameters.Length == delegateParameters.Length);
             foreach (var (methodParam, delegateParam) in operation.Method.Parameters.Zip(delegateParameters)) {
                 var methodParamType = typeSystem.GetSymbolType(methodParam.OriginalDefinition);
-                methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution);
+                methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution, tsBuilder);
                 switch (methodParam.RefKind.ToVariance()) {
                     case VarianceKind.In:
                         CreateCastEdge(delegateParam, methodParamType, label);
@@ -960,7 +960,7 @@ namespace ICSharpCode.NullabilityInference
             }
 
             var returnType = typeSystem.GetSymbolType(operation.Method.OriginalDefinition);
-            returnType = returnType.WithSubstitution(operation.Method.ReturnType, substitution);
+            returnType = returnType.WithSubstitution(operation.Method.ReturnType, substitution, tsBuilder);
             CreateCastEdge(returnType, delegateReturnType, label);
         }
 
@@ -1270,12 +1270,12 @@ namespace ICSharpCode.NullabilityInference
 
                 var param = method.Parameters.Single();
                 var paramType = typeSystem.GetSymbolType(param.OriginalDefinition);
-                paramType = paramType.WithSubstitution(param.Type, substitution);
+                paramType = paramType.WithSubstitution(param.Type, substitution, tsBuilder);
                 CreateCastEdge(input, paramType, label);
 
                 // use return type of user-defined operator as input for the remaining conversion
                 var returnType = typeSystem.GetSymbolType(method.OriginalDefinition);
-                returnType = returnType.WithSubstitution(method.ReturnType, substitution);
+                returnType = returnType.WithSubstitution(method.ReturnType, substitution, tsBuilder);
                 CreateCastEdge(returnType, target, label);
             } else if (conv.IsReference || conv.IsIdentity || conv.IsBoxing || conv.IsPointer) {
                 CreateCastEdge(input, target, label);
@@ -1568,9 +1568,9 @@ namespace ICSharpCode.NullabilityInference
             type.SetName("delegate");
             var substitution = new TypeSubstitution(type.TypeArguments, new TypeWithNode[0]);
             var delegateReturnType = typeSystem.GetSymbolType(delegateType.DelegateInvokeMethod.OriginalDefinition);
-            delegateReturnType = delegateReturnType.WithSubstitution(delegateType.DelegateInvokeMethod.ReturnType, substitution);
+            delegateReturnType = delegateReturnType.WithSubstitution(delegateType.DelegateInvokeMethod.ReturnType, substitution, tsBuilder);
             var delegateParameters = delegateType.DelegateInvokeMethod.Parameters
-                .Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution)).ToArray();
+                .Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution, tsBuilder)).ToArray();
             switch (operation.Target) {
                 case IAnonymousFunctionOperation lambda:
                     // Create edges for lambda parameters
