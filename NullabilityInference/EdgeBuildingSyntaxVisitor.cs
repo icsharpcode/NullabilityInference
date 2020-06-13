@@ -121,6 +121,13 @@ namespace ICSharpCode.NullabilityInference
                     return new TypeWithNode(pts, typeSystem.ObliviousNode, typeArgs);
                 case IArrayTypeSymbol ats:
                     return new TypeWithNode(ats, mapping[node], typeArgs);
+                case IDynamicTypeSymbol dynamicType:
+                    Debug.Assert(dynamicType.CanBeMadeNullable());
+                    if (CanBeMadeNullableSyntax(node)) {
+                        return new TypeWithNode(dynamicType, mapping[node], typeArgs);
+                    } else {
+                        return new TypeWithNode(dynamicType, typeSystem.ObliviousNode, typeArgs);
+                    }
                 default:
                     return typeSystem.VoidType;
             }
