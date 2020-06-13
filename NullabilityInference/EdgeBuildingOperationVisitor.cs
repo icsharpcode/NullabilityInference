@@ -313,8 +313,10 @@ namespace ICSharpCode.NullabilityInference
             var awaitableType = Visit(operation.Operation, EdgeBuildingContext.Normal);
             var awaitInfo = syntaxVisitor.semanticModel.GetAwaitExpressionInfo((AwaitExpressionSyntax)operation.Syntax);
 
-            if (awaitInfo.GetAwaiterMethod == null)
-                throw new NotSupportedException("await without GetAwaiterMethod");
+            if (awaitInfo.GetAwaiterMethod == null) {
+                // Not sure why, but sometimes roslyn fails to give us any AwaitExpressionInfo.
+                return typeSystem.GetObliviousType(operation.Type);
+            }
             var getAwaiterSubstitution = SubstitutionForMemberAccess(awaitableType, awaitInfo.GetAwaiterMethod);
             var awaiterType = typeSystem.GetSymbolType(awaitInfo.GetAwaiterMethod.OriginalDefinition);
             awaiterType = awaiterType.WithSubstitution(awaitInfo.GetAwaiterMethod.ReturnType, getAwaiterSubstitution);
