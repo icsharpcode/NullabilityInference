@@ -1164,5 +1164,19 @@ class Program {
     async Task<string> GetEmpty() => string.Empty;
 }");
         }
+
+        [Fact]
+        public void LocalMethodInGenericMethod()
+        {
+            AssertNullabilityInference(@"
+class Program {
+    public T Test<T>()
+    {
+        return Get();
+
+        T Get() => default;
+    }
+}");
+        }
     }
 }

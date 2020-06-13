@@ -120,6 +120,17 @@ namespace ICSharpCode.NullabilityInference
         }
 
         /// <summary>
+        /// Gets the full arity of the method, including the number of type parameters inherited from outer methods.
+        /// </summary>
+        public static int FullArity(this IMethodSymbol method)
+        {
+            if (method.ContainingSymbol is IMethodSymbol outerMethod)
+                return outerMethod.FullArity() + method.Arity;
+            else
+                return method.Arity;
+        }
+
+        /// <summary>
         /// Gets the full list of type arguments for the type symbol, including the number of type arguments inherited from outer classes.
         /// </summary>
         public static IEnumerable<ITypeSymbol> FullTypeArguments(this INamedTypeSymbol type)
@@ -139,6 +150,19 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var typeArg in type.TypeArguments)
                     yield return typeArg;
             }
+        }
+
+        /// <summary>
+        /// Gets the full list of type arguments for the type symbol, including the number of type arguments inherited from outer methods.
+        /// </summary>
+        public static IEnumerable<ITypeSymbol> FullTypeArguments(this IMethodSymbol method)
+        {
+            if (method.ContainingSymbol is IMethodSymbol outerMethod) {
+                foreach (var outerTypeArg in outerMethod.FullTypeArguments())
+                    yield return outerTypeArg;
+            }
+            foreach (var typeArg in method.TypeArguments)
+                yield return typeArg;
         }
 
         /// <summary>
@@ -179,6 +203,16 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public static IEnumerable<ITypeParameterSymbol> FullTypeParameters(this IMethodSymbol method)
+        {
+            if (method.ContainingSymbol is IMethodSymbol outerMethod) {
+                foreach (var tp in outerMethod.FullTypeParameters())
+                    yield return tp;
+            }
+            foreach (var tp in method.TypeParameters)
+                yield return tp;
+        }
+
         /// <summary>
         /// Gets the index of the type parameter in its parent type's FullTypeParameters()
         /// </summary>
@@ -187,7 +221,11 @@ namespace ICSharpCode.NullabilityInference
             if (tp.TypeParameterKind == TypeParameterKind.Type) {
                 return tp.Ordinal + (tp.ContainingType?.ContainingType.FullArity() ?? 0);
             } else {
-                return tp.Ordinal;
+                if (tp.ContainingSymbol?.ContainingSymbol is IMethodSymbol outerMethod) {
+                    return tp.Ordinal + outerMethod.FullArity();
+                } else {
+                    return tp.Ordinal;
+                }
             }
         }
 

@@ -714,10 +714,11 @@ namespace ICSharpCode.NullabilityInference
         {
             var classTypeArguments = ClassTypeArgumentsForMemberAccess(receiverType, member);
             TypeWithNode[] methodTypeArguments;
-            if (member is IMethodSymbol method && method.Arity > 0) {
-                methodTypeArguments = new TypeWithNode[method.Arity];
-                for (int i = 0; i < methodTypeArguments.Length; i++) {
-                    methodTypeArguments[i] = typeSystem.GetObliviousType(method.TypeArguments[i]);
+            if (member is IMethodSymbol method) {
+                methodTypeArguments = new TypeWithNode[method.FullArity()];
+                int i = 0;
+                foreach (var ta in method.FullTypeArguments()) {
+                    methodTypeArguments[i++] = typeSystem.GetObliviousType(ta);
                 }
             } else {
                 methodTypeArguments = new TypeWithNode[0];
@@ -803,25 +804,47 @@ namespace ICSharpCode.NullabilityInference
                     receiverType = receiverSyntax.Accept(syntaxVisitor);
                 }
             }
-            var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.TargetMethod);
+
+            var targetMethod = operation.TargetMethod;
+            var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, targetMethod);
             TypeWithNode[]? methodTypeArgNodes = null;
             if (operation.Syntax is InvocationExpressionSyntax ies) {
                 var typeArgSyntax = FindTypeArgumentList(ies.Expression);
                 methodTypeArgNodes = typeArgSyntax?.Arguments.Select(syntaxVisitor.Visit).ToArray();
             }
+            methodTypeArgNodes = ExtendMethodTypeArguments(targetMethod, methodTypeArgNodes);
+            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
+            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
+            var returnType = typeSystem.GetSymbolType(targetMethod.OriginalDefinition);
+            returnType = returnType.WithSubstitution(targetMethod.ReturnType, substitution);
+            return returnType;
+        }
+
+        private TypeWithNode[] ExtendMethodTypeArguments(IMethodSymbol targetMethod, TypeWithNode[]? methodTypeArgNodes)
+        {
             // If there are no syntactic type arguments, create temporary type nodes instead to represent
             // the inferred type arguments.
             if (methodTypeArgNodes == null) {
-                methodTypeArgNodes = operation.TargetMethod.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
+                methodTypeArgNodes = targetMethod.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
                 for (int i = 0; i < methodTypeArgNodes.Length; i++) {
-                    methodTypeArgNodes[i].SetName($"{operation.TargetMethod.Name}!!{i}");
+                    methodTypeArgNodes[i].SetName($"{targetMethod.Name}!!{i}");
                 }
             }
-            var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
-            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
-            var returnType = typeSystem.GetSymbolType(operation.TargetMethod.OriginalDefinition);
-            returnType = returnType.WithSubstitution(operation.TargetMethod.ReturnType, substitution);
-            return returnType;
+            if (targetMethod.ContainingSymbol is IMethodSymbol outerMethod) {
+                // Adjust the array to include entries to type parameters from outer methods
+                int outerArity = outerMethod.FullArity();
+                if (outerArity > 0) {
+                    TypeWithNode[] fullMethodTypeArgNodes = new TypeWithNode[methodTypeArgNodes.Length + outerArity];
+                    int i = 0;
+                    foreach (var ta in outerMethod.FullTypeArguments()) {
+                        fullMethodTypeArgNodes[i++] = typeSystem.GetObliviousType(ta);
+                    }
+                    Debug.Assert(i + methodTypeArgNodes.Length == fullMethodTypeArgNodes.Length);
+                    Array.Copy(methodTypeArgNodes, 0, fullMethodTypeArgNodes, i, methodTypeArgNodes.Length);
+                    return fullMethodTypeArgNodes;
+                }
+            }
+            return methodTypeArgNodes;
         }
 
         private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, TypeWithNode[] delegateParameters)
@@ -833,9 +856,7 @@ namespace ICSharpCode.NullabilityInference
                 var typeArgSyntax = FindTypeArgumentList(es);
                 methodTypeArgNodes = typeArgSyntax?.Arguments.Select(syntaxVisitor.Visit).ToArray();
             }
-            // If there are no syntactic type arguments, create temporary type nodes instead to represent
-            // the inferred type arguments.
-            methodTypeArgNodes ??= operation.Method.TypeArguments.Select(tsBuilder.CreateTemporaryType).ToArray();
+            methodTypeArgNodes = ExtendMethodTypeArguments(operation.Method, methodTypeArgNodes);
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
             EdgeLabel label = new EdgeLabel($"MethodGroup", operation);
 
