@@ -182,3 +182,126 @@ Thus, `n#1`, the type argument `#2` and `a#3` are all marked as nullable. But `b
 
 If the type arguments are not explicitly specified but inferred by the compiler, nullability inference will create additional "helper nodes" for the graph
 that are not associated with any syntax. This allows us to construct the edges for the calls in the same way.
+
+### Generic Types
+
+```csharp
+ 1: using System.Collections.Generic;
+ 2: class Program
+ 3: {
+ 4:     List<string> list = new List<string>();
+ 5: 
+ 6:     public void Add(string name) => list.Add(name);
+ 7:     public string Get(int i) => list[i];
+ 8: }
+```
+
+<img src="https://github.com/icsharpcode/NullabilityInference/raw/master/.github/img/GenericType.png" />
+
+In this graph, you can see how generic types are handled:
+The type of the `list` field generates two nodes:
+ * `list#3` represents the nullability of the list itself.
+ * `list!0#2` represents the nullability of the strings within the list.
+Similarly, `new!0#1` represents the nullability of the string type argument in the `new List<string>` expression.
+Because the type parameter of `List` is invariant, the field initialization in line 4 creates a pair of edges (in both directions)
+between the `new!0#1` and `list!0#2` nodes. This forces both type arguments to have the same nullability.
+
+The resulting graph expresses that the nullability of the return type of `Get` (represented by `Get#5`) depends on the nullability
+of the `name` parameter in the `Add` method (node `name#4`).
+Whether these types will be inferred as nullable or non-nullable will depend on whether the remainder of the program passes a nullable type to `Add`,
+and on the existance of code that uses the return value of `Get` without null checks.
+
+### Flow-analysis
+
+```csharp
+01: using System.Collections.Generic;
+02: using System.Diagnostics.CodeAnalysis;
+03: class Program
+04: {
+05:     public string someString = "hello";
+06: 
+07:     public bool TryGet(int i, out string name)
+08:     {
+09:         if (i > 0)
+10:         {
+11:             name = someString;
+12:             return true;
+13:         }
+14:         name = null;
+15:         return false;
+16:     }
+17: 
+18:     public int Use(int i)
+19:     {
+20:         if (TryGet(i, out string x))
+21:         {
+22:             return x.Length;
+23:         }
+24:         else
+25:         {
+26:             return 0;
+27:         }
+28:     }
+29: }
+```
+
+The `TryGet` function involves a common C# code pattern: the nullability of an `out` parameter depends on the boolean return value.
+If the function returns true, callers can assume the out variable was assigned a non-null value.
+But if the function returns false, the value might be null.
+
+Using our [own flow-analysis](https://github.com/icsharpcode/NullabilityInference/issues/5), the InferNull tool can handle this case
+and automatically infer the `[NotNullWhen(true)]` attribute!
+
+<img src="https://github.com/icsharpcode/NullabilityInference/raw/master/.github/img/FlowState.png" />
+
+For the `name` parameter (in general: for any out-parameters in functions returning `bool`), we create not only the declared type `name#2`,
+but also the `name_when_true` and `name_when_false` nodes. These extra helper nodes represent the nullability of `out string name` in the cases
+where `TryGet` returns true/false.
+
+Within the body of `TryGet`, we track the nullability of `name` based on the previous assignment as the "flow-state".
+After the assignment `name = someString;` in line 11, the nullability of `name` is the same as the nullability of `someString`.
+We represent this by saving the nullability node `someString#1` as the flow-state of `name`.
+On the `return true;` statement in line 12, we connect the current flow-state of the `out` parameters with the `when_true` helper nodes,
+resulting in the `someString#1`->`<name_when_true#1>` edge.
+Similarly, the `return false;` statement in line 15 results in an edge from `<nullable>` to `<name_when_false#2>`, because the `name = null;` assignment
+has set the flow-state of `name` to `<nullable>`.
+
+In the `Use` method, we also employ flow-state: even though `x` itself needs to be nullable, the then-branch of the `if` uses the `<name_when_true#1>` node
+as flow-state for the `x` variable.
+This causes the `x.Length` dereference to create an edge starting at `<name_when_true#1>`, rather than x's declared type (`x#3`).
+
+This allows inference to success (no path from `<nullable>` to `<nonnull>`. In the inference result, `name#2` and `<name_when_false#2>` are nullable,
+but `<name_when_true#1>` is non-nullable. The difference in nullabilities between the when_false and when_true cases causes the tool to emit a `[NotNullWhen(true)]`
+attribute:
+
+```csharp
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+class Program
+{
+    public string someString = "hello";
+
+    public bool TryGet(int i, [NotNullWhen(true)] out string? name)
+    {
+        if (i > 0)
+        {
+            name = someString;
+            return true;
+        }
+        name = null;
+        return false;
+    }
+
+    public int Use(int i)
+    {
+        if (TryGet(i, out string? x))
+        {
+            return x.Length;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+}
+```

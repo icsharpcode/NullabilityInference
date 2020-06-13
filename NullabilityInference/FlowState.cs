@@ -25,6 +25,11 @@ namespace ICSharpCode.NullabilityInference
                 this.Locals = locals;
                 this.Unreachable = unreachable;
             }
+
+            internal Snapshot? WithUnreachable()
+            {
+                return new Snapshot(ThisPath, Locals, unreachable: true);
+            }
         }
 
         internal readonly struct PathNode

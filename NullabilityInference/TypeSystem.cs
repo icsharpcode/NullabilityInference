@@ -23,7 +23,6 @@ using System.Diagnostics;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace ICSharpCode.NullabilityInference
 {
@@ -52,6 +51,8 @@ namespace ICSharpCode.NullabilityInference
         private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
         private readonly Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode> baseTypes = new Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode>();
         private readonly List<NullabilityNode> additionalNodes = new List<NullabilityNode>();
+        private readonly Dictionary<IParameterSymbol, (NullabilityNode whenTrue, NullabilityNode whenFalse)> outParamFlowNodes
+            = new Dictionary<IParameterSymbol, (NullabilityNode whenTrue, NullabilityNode whenFalse)>();
 
 
         private readonly INamedTypeSymbol voidType;
@@ -183,27 +184,48 @@ namespace ICSharpCode.NullabilityInference
             return new TypeWithNode(type, ObliviousNode);
         }
 
-        internal (NullabilityNode onTrue, NullabilityNode onFalse) GetOutParameterFlowNodes(IParameterSymbol param, TypeSubstitution substitution)
+        internal bool TryGetOutParameterFlowNodes(IParameterSymbol param, out (NullabilityNode whenTrue, NullabilityNode whenFalse) pair)
         {
+            return outParamFlowNodes.TryGetValue(param, out pair);
+        }
+
+        internal (NullabilityNode whenTrue, NullabilityNode whenFalse) GetOutParameterFlowNodes(IParameterSymbol param, TypeSubstitution substitution)
+        {
+            if (outParamFlowNodes.TryGetValue(param, out var pair)) {
+                return pair;
+            }
             var ty = GetSymbolType(param, ignoreAttributes: true);
             if (ty.Type is ITypeParameterSymbol tp) {
                 ty = substitution[tp.TypeParameterKind, tp.FullOrdinal()];
             }
-            var onTrue = ty.Node;
-            var onFalse = ty.Node;
+            var whenTrue = ty.Node;
+            var whenFalse = ty.Node;
             foreach (var attr in param.GetAttributes()) {
                 string? attrName = attr.AttributeClass?.GetFullName();
                 if (attrName == "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute") {
                     if (attr.ConstructorArguments.Single().Value is bool b) {
-                        (b ? ref onTrue : ref onFalse) = NullableNode;
+                        (b ? ref whenTrue : ref whenFalse) = NullableNode;
                     }
                 } else if (attrName == "System.Diagnostics.CodeAnalysis.NotNullWhenAttribute") {
                     if (attr.ConstructorArguments.Single().Value is bool b) {
-                        (b ? ref onTrue : ref onFalse) = NonNullNode;
+                        (b ? ref whenTrue : ref whenFalse) = NonNullNode;
                     }
                 }
             }
-            return (onTrue, onFalse);
+            return (whenTrue, whenFalse);
+        }
+
+        private static bool HasAnyOutParamFlowAttribute(IParameterSymbol param)
+        {
+            foreach (var attr in param.GetAttributes()) {
+                string? attrName = attr.AttributeClass?.GetFullName();
+                if (attrName == "System.Diagnostics.CodeAnalysis.MaybeNullWhenAttribute") {
+                    return true;
+                } else if (attrName == "System.Diagnostics.CodeAnalysis.NotNullWhenAttribute") {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private TypeWithNode GetDirectBase(ITypeSymbol derivedTypeDef, INamedTypeSymbol baseType, INamedTypeSymbol baseTypeInstance, TypeSubstitution substitution)
@@ -369,7 +391,8 @@ namespace ICSharpCode.NullabilityInference
         /// </summary>
         /// <remarks>
         /// Neither the type-system nor the builder is thread-safe.
-        /// However, multiple builders can be used concurrently
+        /// However, multiple builders wrapping the same type-system can be used concurrently,
+        /// as long as the builders are not flushed concurrently.
         /// </remarks>
         internal class Builder
         {
@@ -380,14 +403,14 @@ namespace ICSharpCode.NullabilityInference
 
             public Builder(TypeSystem typeSystem)
             {
-                // Don't store the typeSystem is this; we may not access it outside of Flush().
+                // Don't store the typeSystem in this; we may not access it outside of Flush().
                 this.NullableNode = typeSystem.NullableNode;
                 this.NonNullNode = typeSystem.NonNullNode;
                 this.ObliviousNode = typeSystem.ObliviousNode;
                 this.VoidType = typeSystem.VoidType;
             }
 
-            internal NullabilityNode FromAttributes(ImmutableArray<AttributeData> attributeData)
+            internal NullabilityNode? FromAttributes(ImmutableArray<AttributeData> attributeData)
             {
                 return TypeSystem.FromAttributes(attributeData, new SpecialNodes(NullableNode, NonNullNode, ObliviousNode));
             }
@@ -407,6 +430,19 @@ namespace ICSharpCode.NullabilityInference
                 AddAction(ts => ts.baseTypes[key] = baseType);
             }
 
+            public void RegisterOutParamFlowNodes(IParameterSymbol parameter)
+            {
+                Debug.Assert(SymbolEqualityComparer.Default.Equals(parameter, parameter.OriginalDefinition));
+                if (HasAnyOutParamFlowAttribute(parameter)) {
+                    return; // use existing attribute, don't try to infer a new one
+                }
+                var whenTrue = CreateHelperNode();
+                var whenFalse = CreateHelperNode();
+                whenTrue.SetName(parameter.Name + "_when_true");
+                whenFalse.SetName(parameter.Name + "_when_false");
+                AddAction(ts => ts.outParamFlowNodes.Add(parameter, (whenTrue, whenFalse)));
+            }
+
             private readonly List<Action<TypeSystem>> cachedActions = new List<Action<TypeSystem>>();
             private readonly List<HelperNullabilityNode> newNodes = new List<HelperNullabilityNode>();
             private readonly List<NullabilityEdge> newEdges = new List<NullabilityEdge>();
@@ -418,6 +454,7 @@ namespace ICSharpCode.NullabilityInference
 
             public void Flush(TypeSystem typeSystem)
             {
+                Debug.Assert(typeSystem.NonNullNode == this.NonNullNode, "Flush called with wrong type-system instance");
                 foreach (var action in cachedActions) {
                     action(typeSystem);
                 }

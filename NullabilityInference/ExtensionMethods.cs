@@ -259,6 +259,19 @@ namespace ICSharpCode.NullabilityInference
         }
 
         /// <summary>
+        /// Gets the return type used for "return" statements within the method.
+        /// </summary>
+        public static ITypeSymbol EffectiveReturnType(this IMethodSymbol method)
+        {
+            // See also: ExtractTaskReturnType()
+            var returnType = method.ReturnType;
+            if (method.IsAsync && returnType is INamedTypeSymbol namedType && namedType.TypeArguments.Length == 1) {
+                returnType = namedType.TypeArguments.Single();
+            }
+            return returnType;
+        }
+
+        /// <summary>
         /// Remove item at index <c>index</c> in O(1) by swapping it with the last element in the collection before removing it.
         /// Useful when the order of elements in the list is not relevant.
         /// </summary>

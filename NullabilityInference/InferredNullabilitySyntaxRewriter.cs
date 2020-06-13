@@ -16,7 +16,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
 
+using System.Diagnostics;
+using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -29,13 +32,15 @@ namespace ICSharpCode.NullabilityInference
     internal sealed class InferredNullabilitySyntaxRewriter : CSharpSyntaxRewriter
     {
         private readonly SemanticModel semanticModel;
+        private readonly TypeSystem typeSystem;
         private readonly SyntaxToNodeMapping mapping;
         private readonly CancellationToken cancellationToken;
 
-        public InferredNullabilitySyntaxRewriter(SemanticModel semanticModel, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
+        public InferredNullabilitySyntaxRewriter(SemanticModel semanticModel, TypeSystem typeSystem, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
             : base(visitIntoStructuredTrivia: true)
         {
             this.semanticModel = semanticModel;
+            this.typeSystem = typeSystem;
             this.mapping = mapping;
             this.cancellationToken = cancellationToken;
         }
@@ -113,6 +118,25 @@ namespace ICSharpCode.NullabilityInference
                 }
             }
             return newNode;
+        }
+
+        public override SyntaxNode? VisitParameter(ParameterSyntax node)
+        {
+            var param = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            node = (ParameterSyntax)base.VisitParameter(node)!;
+            if (isActive && param != null && typeSystem.TryGetOutParameterFlowNodes(param, out var pair)) {
+                if (pair.whenTrue.NullType != pair.whenFalse.NullType) {
+                    Debug.Assert(pair.whenTrue.NullType == NullType.NonNull || pair.whenFalse.NullType == NullType.NonNull);
+                    // Create [NotNullWhen] attribute
+                    bool notNullWhen = (pair.whenTrue.NullType == NullType.NonNull);
+                    var attrArgument = SyntaxFactory.LiteralExpression(notNullWhen ? SyntaxKind.TrueLiteralExpression : SyntaxKind.FalseLiteralExpression);
+                    var newAttribute = SyntaxFactory.Attribute(SyntaxFactory.IdentifierName("NotNullWhen"),
+                        SyntaxFactory.AttributeArgumentList(SyntaxFactory.SingletonSeparatedList(SyntaxFactory.AttributeArgument(attrArgument))));
+                    var newAttributeList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(newAttribute));
+                    node = node.AddAttributeLists(newAttributeList.WithTrailingTrivia(SyntaxFactory.Space));
+                }
+            }
+            return node;
         }
     }
 }

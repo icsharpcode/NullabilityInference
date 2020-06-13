@@ -16,6 +16,7 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE
 
+using System.Runtime.Remoting.Proxies;
 using Xunit;
 
 namespace ICSharpCode.NullabilityInference.Tests
@@ -193,6 +194,67 @@ class Program {
         return a;
     }
 }", returnNullable: false, returnDependsOnInput: true);
+        }
+
+        [Fact]
+        public void InferNotNullWhenTrue()
+        {
+            string program = @"
+using System.Collections.Generic;
+class DataStructure
+{
+    Dictionary<string, string> dict = new Dictionary<string, string>();
+
+    public bool TryGetValue(string key, [Attr] out string? val)
+    {
+        return dict.TryGetValue(key, out val);
+    }
+}";
+            AssertNullabilityInference(
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]"),
+                inputProgram: program.Replace("[Attr] ", ""));
+        }
+
+        [Fact]
+        public void InferNotNullWhenFalse()
+        {
+            string program = @"
+using System.Collections.Generic;
+class DataStructure
+{
+    Dictionary<string, string> dict = new Dictionary<string, string>();
+
+    public bool TryGetValue(string key, [Attr] out string? val)
+    {
+        return !dict.TryGetValue(key, out val);
+    }
+}";
+            AssertNullabilityInference(
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(false)]"),
+                inputProgram: program.Replace("[Attr] ", ""));
+        }
+
+        [Fact]
+        public void InferNotNullWhenTrueFromControlFlow()
+        {
+            string program = @"
+using System.Collections.Generic;
+class DataStructure
+{
+    public bool TryGet(int i, [Attr] out string? name)
+    {
+        if (i > 0)
+        {
+            name = string.Empty;
+            return true;
+        }
+        name = null;
+        return false;
+    }
+}";
+            AssertNullabilityInference(
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]"),
+                inputProgram: program.Replace("[Attr] ", ""));
         }
     }
 }

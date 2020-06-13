@@ -171,15 +171,15 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitLocalFunction(ILocalFunctionOperation operation, EdgeBuildingContext argument)
         {
             var oldFlowState = flowState.SaveSnapshot();
-            var outerReturnType = syntaxVisitor.currentMethodReturnType;
             try {
+                using var outerMethod = syntaxVisitor.SaveCurrentMethod();
+                syntaxVisitor.currentMethod = operation.Symbol;
                 syntaxVisitor.currentMethodReturnType = syntaxVisitor.GetMethodReturnSymbol(operation.Symbol);
                 flowState.Clear();
                 foreach (var child in operation.Children)
                     child.Accept(this, EdgeBuildingContext.Normal);
                 return typeSystem.VoidType;
             } finally {
-                syntaxVisitor.currentMethodReturnType = outerReturnType;
                 flowState.RestoreSnapshot(oldFlowState);
             }
         }
@@ -418,8 +418,33 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitReturn(IReturnOperation operation, EdgeBuildingContext argument)
         {
             if (operation.ReturnedValue != null) {
-                var returnVal = Visit(operation.ReturnedValue, EdgeBuildingContext.Normal);
                 var returnType = syntaxVisitor.currentMethodReturnType;
+                if (operation.Kind == OperationKind.Return && returnType.Type?.SpecialType == SpecialType.System_Boolean && syntaxVisitor.currentMethod != null) {
+                    // When returning a boolean, export flow-states for out parameters
+                    var (onTrue, onFalse) = VisitCondition(operation.ReturnedValue);
+                    foreach (var param in syntaxVisitor.currentMethod.Parameters) {
+                        if (!typeSystem.TryGetOutParameterFlowNodes(param, out var outNodes))
+                            continue;
+                        var path = new AccessPath(AccessPathRoot.Local, ImmutableArray.Create<ISymbol>(param));
+                        if (!onTrue.Unreachable) {
+                            flowState.RestoreSnapshot(onTrue);
+                            if (!flowState.TryGetNode(path, out var node)) {
+                                node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
+                            }
+                            tsBuilder.CreateEdge(node, outNodes.whenTrue, new EdgeLabel($"flow-state of {param.Name} on return true", operation));
+                        }
+                        if (!onFalse.Unreachable) {
+                            flowState.RestoreSnapshot(onFalse);
+                            if (!flowState.TryGetNode(path, out var node)) {
+                                node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
+                            }
+                            tsBuilder.CreateEdge(node, outNodes.whenFalse, new EdgeLabel($"flow-state of {param.Name} on return false", operation));
+                        }
+                    }
+                    // no need to create edge for return value, as `bool` is a value-type
+                    return typeSystem.VoidType;
+                }
+                var returnVal = Visit(operation.ReturnedValue, EdgeBuildingContext.Normal);
                 if (operation.Kind == OperationKind.YieldReturn) {
                     if (returnType.TypeArguments.Count == 0) {
                         // returning non-generic enumerable
@@ -942,7 +967,7 @@ namespace ICSharpCode.NullabilityInference
             _ => null,
         };
 
-        private TypeSubstitution HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext invocationContext)
+        private void HandleArguments(TypeSubstitution substitution, ImmutableArray<IArgumentOperation> arguments, EdgeBuildingContext invocationContext)
         {
             Action? afterCall = null;
             FlowState? flowStateOnTrue = null;
@@ -971,9 +996,9 @@ namespace ICSharpCode.NullabilityInference
                             }
                             if (param.RefKind == RefKind.Out) {
                                 // set flow-state to value provided by the method
-                                var (onTrue, onFalse) = typeSystem.GetOutParameterFlowNodes(param, substitution);
-                                flowStateOnTrue.SetNode(path, onTrue, clearMembers: true);
-                                flowStateOnFalse.SetNode(path, onFalse, clearMembers: true);
+                                var (whenTrue, whenFalse) = typeSystem.GetOutParameterFlowNodes(param, substitution);
+                                flowStateOnTrue.SetNode(path, whenTrue, clearMembers: true);
+                                flowStateOnFalse.SetNode(path, whenFalse, clearMembers: true);
                             } else {
                                 // the method might have mutated the by-ref argument -> reset flow-state to argument's declared type
                                 flowStateOnTrue.SetNode(path, argumentType.Node, clearMembers: true);
@@ -999,7 +1024,6 @@ namespace ICSharpCode.NullabilityInference
                 Debug.Assert(flowStateOnTrue == null && flowStateOnFalse == null);
                 Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
             }
-            return substitution;
         }
 
         private TypeWithNode currentObjectCreationType;
@@ -1132,6 +1156,17 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitLiteral(ILiteralOperation operation, EdgeBuildingContext argument)
         {
+            if (argument == EdgeBuildingContext.Condition && operation.ConstantValue.Value is bool booleanValue) {
+                var snapshot = flowState.SaveSnapshot();
+                if (booleanValue) {
+                    flowStateReturnedOnTrue = snapshot;
+                    flowStateReturnedOnFalse = snapshot.WithUnreachable();
+                } else {
+                    flowStateReturnedOnTrue = snapshot.WithUnreachable();
+                    flowStateReturnedOnFalse = snapshot;
+                }
+                return new TypeWithNode(operation.Type, typeSystem.ObliviousNode); // bool
+            }
             if (operation.Type?.IsValueType == true) {
                 return new TypeWithNode(operation.Type, typeSystem.ObliviousNode);
             } else if (operation.ConstantValue.HasValue && operation.ConstantValue.Value == null) {
@@ -1561,9 +1596,10 @@ namespace ICSharpCode.NullabilityInference
                         }
                     }
                     // Analyze the body, and treat any `return` statements as assignments to `delegateReturnType`.
-                    var outerMethodReturnType = syntaxVisitor.currentMethodReturnType;
                     var outerFlowState = flowState.SaveSnapshot();
                     try {
+                        using var outerMethod = syntaxVisitor.SaveCurrentMethod();
+                        syntaxVisitor.currentMethod = lambda.Symbol;
                         if (lambda.Symbol.IsAsync) {
                             syntaxVisitor.currentMethodReturnType = syntaxVisitor.ExtractTaskReturnType(delegateReturnType);
                         } else {
@@ -1572,7 +1608,6 @@ namespace ICSharpCode.NullabilityInference
                         flowState.Clear();
                         lambda.Body.Accept(this, EdgeBuildingContext.Normal);
                     } finally {
-                        syntaxVisitor.currentMethodReturnType = outerMethodReturnType;
                         flowState.RestoreSnapshot(outerFlowState);
                     }
                     break;

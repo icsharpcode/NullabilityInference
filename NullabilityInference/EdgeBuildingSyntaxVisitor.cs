@@ -150,36 +150,34 @@ namespace ICSharpCode.NullabilityInference
             return mapping[syntax];
         }
 
+        internal IMethodSymbol? currentMethod;
         internal TypeWithNode currentMethodReturnType;
 
         public override TypeWithNode VisitConstructorDeclaration(ConstructorDeclarationSyntax node)
         {
-            var outerMethodReturnType = currentMethodReturnType;
-            try {
-                currentMethodReturnType = typeSystem.VoidType;
-                var operation = semanticModel.GetOperation(node, cancellationToken);
-                if (operation == null)
-                    throw new NotSupportedException($"Could not get operation for {node}");
-                if (node.Initializer?.ThisOrBaseKeyword.Kind() != SyntaxKind.ThisKeyword) {
-                    HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>();
-                    foreach (var assgn in operation.DescendantsAndSelf().OfType<ISimpleAssignmentOperation>()) {
-                        if (assgn.Target is IFieldReferenceOperation fieldRef) {
-                            initializedSymbols.Add(fieldRef.Field);
-                        } else if (assgn.Target is IPropertyReferenceOperation propertyRef) {
-                            initializedSymbols.Add(propertyRef.Property);
-                        } else if (assgn.Target is IEventReferenceOperation eventRef) {
-                            initializedSymbols.Add(eventRef.Event);
-                        }
-                    }
-                    if (node.Parent is TypeDeclarationSyntax typeSyntax) {
-                        bool isStatic = node.Modifiers.Any(SyntaxKind.StaticKeyword);
-                        MarkFieldsAndPropertiesAsNullable(typeSyntax.Members, isStatic, initializedSymbols, new EdgeLabel("uninit", node));
+            using var outerMethod = SaveCurrentMethod();
+            currentMethod = semanticModel.GetDeclaredSymbol(node, cancellationToken);
+            currentMethodReturnType = typeSystem.VoidType;
+            var operation = semanticModel.GetOperation(node, cancellationToken);
+            if (operation == null)
+                throw new NotSupportedException($"Could not get operation for {node}");
+            if (node.Initializer?.ThisOrBaseKeyword.Kind() != SyntaxKind.ThisKeyword) {
+                HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>();
+                foreach (var assgn in operation.DescendantsAndSelf().OfType<ISimpleAssignmentOperation>()) {
+                    if (assgn.Target is IFieldReferenceOperation fieldRef) {
+                        initializedSymbols.Add(fieldRef.Field);
+                    } else if (assgn.Target is IPropertyReferenceOperation propertyRef) {
+                        initializedSymbols.Add(propertyRef.Property);
+                    } else if (assgn.Target is IEventReferenceOperation eventRef) {
+                        initializedSymbols.Add(eventRef.Event);
                     }
                 }
-                return operation.Accept(operationVisitor, new EdgeBuildingContext());
-            } finally {
-                currentMethodReturnType = outerMethodReturnType;
+                if (node.Parent is TypeDeclarationSyntax typeSyntax) {
+                    bool isStatic = node.Modifiers.Any(SyntaxKind.StaticKeyword);
+                    MarkFieldsAndPropertiesAsNullable(typeSyntax.Members, isStatic, initializedSymbols, new EdgeLabel("uninit", node));
+                }
             }
+            return operation.Accept(operationVisitor, new EdgeBuildingContext());
         }
 
         internal void HandleCref(NameMemberCrefSyntax cref)
@@ -216,24 +214,30 @@ namespace ICSharpCode.NullabilityInference
             return HandleMethodDeclaration(node);
         }
 
+        internal IDisposable SaveCurrentMethod()
+        {
+            var outerMethod = currentMethod;
+            var outerMethodReturnType = currentMethodReturnType;
+            return new CallbackOnDispose(delegate {
+                currentMethod = outerMethod;
+                currentMethodReturnType = outerMethodReturnType;
+            });
+        }
+
         private TypeWithNode HandleMethodDeclaration(BaseMethodDeclarationSyntax node)
         {
-            var outerMethodReturnType = currentMethodReturnType;
-            try {
-                var symbol = semanticModel.GetDeclaredSymbol(node);
-                if (symbol != null) {
-                    CreateOverrideEdge(symbol, symbol.OverriddenMethod);
-                    currentMethodReturnType = GetMethodReturnSymbol(symbol);
-                } else {
-                    currentMethodReturnType = typeSystem.VoidType;
-                }
-                if (node.Body != null || node.ExpressionBody != null) {
-                    return HandleAsOperation(node);
-                } else {
-                    return typeSystem.VoidType;
-                }
-            } finally {
-                currentMethodReturnType = outerMethodReturnType;
+            using var outerMethod = SaveCurrentMethod();
+            currentMethod = semanticModel.GetDeclaredSymbol(node);
+            if (currentMethod != null) {
+                CreateOverrideEdge(currentMethod, currentMethod.OverriddenMethod);
+                currentMethodReturnType = GetMethodReturnSymbol(currentMethod);
+            } else {
+                currentMethodReturnType = typeSystem.VoidType;
+            }
+            if (node.Body != null || node.ExpressionBody != null) {
+                return HandleAsOperation(node);
+            } else {
+                return typeSystem.VoidType;
             }
         }
 
@@ -248,6 +252,7 @@ namespace ICSharpCode.NullabilityInference
 
         internal TypeWithNode ExtractTaskReturnType(TypeWithNode taskType)
         {
+            // See also: EffectiveReturnType() extension method
             if (taskType.TypeArguments.Count == 0) {
                 return typeSystem.VoidType;
             } else {
@@ -258,61 +263,52 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitPropertyDeclaration(PropertyDeclarationSyntax node)
         {
             node.ExplicitInterfaceSpecifier?.Accept(this);
-            var outerMethodReturnType = currentMethodReturnType;
-            try {
-                var symbol = semanticModel.GetDeclaredSymbol(node);
-                if (symbol != null) {
-                    CreateOverrideEdge(symbol, symbol.OverriddenProperty);
-                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
-                } else {
-                    currentMethodReturnType = typeSystem.VoidType;
-                }
-                node.AccessorList?.Accept(this);
-                node.ExpressionBody?.Accept(this);
-                node.Initializer?.Accept(this);
-                return typeSystem.VoidType;
-            } finally {
-                currentMethodReturnType = outerMethodReturnType;
+            using var outerMethod = SaveCurrentMethod();
+            var symbol = semanticModel.GetDeclaredSymbol(node);
+            if (symbol != null) {
+                CreateOverrideEdge(symbol, symbol.OverriddenProperty);
+                currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+            } else {
+                currentMethodReturnType = typeSystem.VoidType;
             }
+            currentMethod = null;
+            node.AccessorList?.Accept(this);
+            node.ExpressionBody?.Accept(this);
+            node.Initializer?.Accept(this);
+            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitIndexerDeclaration(IndexerDeclarationSyntax node)
         {
             node.ExplicitInterfaceSpecifier?.Accept(this);
-            var outerMethodReturnType = currentMethodReturnType;
-            try {
-                var symbol = semanticModel.GetDeclaredSymbol(node);
-                if (symbol != null) {
-                    CreateOverrideEdge(symbol, symbol.OverriddenProperty);
-                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
-                } else {
-                    currentMethodReturnType = typeSystem.VoidType;
-                }
-                node.AccessorList?.Accept(this);
-                node.ExpressionBody?.Accept(this);
-                return typeSystem.VoidType;
-            } finally {
-                currentMethodReturnType = outerMethodReturnType;
+            using var outerMethod = SaveCurrentMethod();
+            var symbol = semanticModel.GetDeclaredSymbol(node);
+            if (symbol != null) {
+                CreateOverrideEdge(symbol, symbol.OverriddenProperty);
+                currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+            } else {
+                currentMethodReturnType = typeSystem.VoidType;
             }
+            currentMethod = null;
+            node.AccessorList?.Accept(this);
+            node.ExpressionBody?.Accept(this);
+            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitEventDeclaration(EventDeclarationSyntax node)
         {
             node.ExplicitInterfaceSpecifier?.Accept(this);
-            var outerMethodReturnType = currentMethodReturnType;
-            try {
-                var symbol = semanticModel.GetDeclaredSymbol(node);
-                if (symbol != null) {
-                    CreateOverrideEdge(symbol, symbol.OverriddenEvent);
-                    currentMethodReturnType = typeSystem.GetSymbolType(symbol);
-                } else {
-                    currentMethodReturnType = typeSystem.VoidType;
-                }
-                node.AccessorList?.Accept(this);
-                return typeSystem.VoidType;
-            } finally {
-                currentMethodReturnType = outerMethodReturnType;
+            using var outerMethod = SaveCurrentMethod();
+            var symbol = semanticModel.GetDeclaredSymbol(node);
+            if (symbol != null) {
+                CreateOverrideEdge(symbol, symbol.OverriddenEvent);
+                currentMethodReturnType = typeSystem.GetSymbolType(symbol);
+            } else {
+                currentMethodReturnType = typeSystem.VoidType;
             }
+            currentMethod = null;
+            node.AccessorList?.Accept(this);
+            return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitBlock(BlockSyntax node)

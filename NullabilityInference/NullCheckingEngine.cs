@@ -108,7 +108,7 @@ namespace ICSharpCode.NullabilityInference
         {
             return compilation.SyntaxTrees.AsParallel().WithCancellation(cancellationToken).Select(syntaxTree => {
                 var semanticModel = compilation.GetSemanticModel(syntaxTree);
-                var rewriter = new InferredNullabilitySyntaxRewriter(semanticModel, typeSystem.GetMapping(syntaxTree), cancellationToken);
+                var rewriter = new InferredNullabilitySyntaxRewriter(semanticModel, typeSystem, typeSystem.GetMapping(syntaxTree), cancellationToken);
                 var newRoot = rewriter.Visit(syntaxTree.GetRoot());
                 return syntaxTree.WithRootAndOptions(newRoot, syntaxTree.Options);
             });

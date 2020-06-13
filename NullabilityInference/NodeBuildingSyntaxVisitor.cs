@@ -21,12 +21,10 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
-using System.Net.Security;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Operations;
 
 namespace ICSharpCode.NullabilityInference
 {
@@ -294,6 +292,10 @@ namespace ICSharpCode.NullabilityInference
                     }
                     parameterTypes.Add(symbol, type);
                     typeSystem.AddSymbolType(symbol, type);
+
+                    if (symbol.RefKind == RefKind.Out && (symbol.ContainingSymbol as IMethodSymbol)?.EffectiveReturnType().SpecialType == SpecialType.System_Boolean) {
+                        typeSystem.RegisterOutParamFlowNodes(symbol);
+                    }
                 }
             }
             node.Default?.Accept(this);
