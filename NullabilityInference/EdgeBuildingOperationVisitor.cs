@@ -1563,9 +1563,10 @@ namespace ICSharpCode.NullabilityInference
         {
             var lhs = Visit(operation.Target, EdgeBuildingContext.LValue);
             var rhs = Visit(operation.Value, EdgeBuildingContext.Normal);
-            if (lhs.Type?.IsTupleType == true && rhs.Type?.IsTupleType == true) {
-                Debug.Assert(lhs.TypeArguments.Count == rhs.TypeArguments.Count);
-                foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhs.TypeArguments)) {
+            if (lhs.Type?.IsTupleType == true) {
+                var rhsTypes = rhs.Type?.IsTupleType == true ? rhs.TypeArguments : GetDeconstructParameters(operation, lhs.TypeArguments.Count);
+                Debug.Assert(lhs.TypeArguments.Count == rhsTypes.Count);
+                foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhsTypes)) {
                     tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement, new EdgeLabel("DeconstructionAssign", operation));
                 }
                 if (AccessPath.FromOperation(operation.Target) is AccessPath path) {
@@ -1574,8 +1575,20 @@ namespace ICSharpCode.NullabilityInference
                 }
                 return rhs;
             } else {
-                throw new NotImplementedException("DeconstructionAssignment for non-tuple near " + operation.Syntax?.GetLocation().StartPosToString());
-            }
+                throw new NotImplementedException("Could not deconstruct into non-tuple type near " + operation.Syntax?.GetLocation().StartPosToString());
+            }            
+        }
+
+        private IReadOnlyCollection<TypeWithNode> GetDeconstructParameters(IDeconstructionAssignmentOperation deconstructOperation, int parameterCount)
+        {
+            return GetDeconstructorMethod(deconstructOperation, parameterCount).Parameters.Select(p => typeSystem.GetSymbolType(p)).ToArray();
+        }
+
+        private static IMethodSymbol GetDeconstructorMethod(IDeconstructionAssignmentOperation deconstructOperation, int parameterCount)
+        {
+            return deconstructOperation.Value.Type.GetMembers("Deconstruct").OfType<IMethodSymbol>()
+                .FirstOrDefault(m => m.Parameters.Length == parameterCount)
+                ?? throw new NotImplementedException("Could not find deconstruct method for operation near " + deconstructOperation.Syntax?.GetLocation().StartPosToString());
         }
 
         public override TypeWithNode VisitDeclarationExpression(IDeclarationExpressionOperation operation, EdgeBuildingContext argument)
