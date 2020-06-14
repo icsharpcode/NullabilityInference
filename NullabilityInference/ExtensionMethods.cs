@@ -271,6 +271,30 @@ namespace ICSharpCode.NullabilityInference
             return returnType;
         }
 
+        public static bool HasDoesNotReturnAttribute(this IMethodSymbol method)
+        {
+            foreach (var attr in method.GetAttributes()) {
+                if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnAttribute") {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        public static bool HasDoesNotReturnIfAttribute(this IParameterSymbol param, out bool parameterValue)
+        {
+            foreach (var attr in param.GetAttributes()) {
+                if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
+                    if (attr.ConstructorArguments.Single().Value is bool val) {
+                        parameterValue = val;
+                        return true;
+                    }
+                }
+            }
+            parameterValue = default;
+            return false;
+        }
+
         /// <summary>
         /// Remove item at index <c>index</c> in O(1) by swapping it with the last element in the collection before removing it.
         /// Useful when the order of elements in the list is not relevant.

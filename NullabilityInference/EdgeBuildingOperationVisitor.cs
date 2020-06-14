@@ -569,14 +569,46 @@ namespace ICSharpCode.NullabilityInference
                 return HandleOverloadedBinaryOperator(operation, lhs, rhs, operation.OperatorMethod, operation.IsLifted);
             }
             if (operation.OperatorKind == BinaryOperatorKind.NotEquals || operation.OperatorKind == BinaryOperatorKind.Equals) {
-                // check for 'Debug.Assert(x != null);'
-                if (IsNullLiteral(operation.RightOperand)) {
-                    HandleNullAssert(operation, lhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
-                } else if (IsNullLiteral(operation.LeftOperand)) {
-                    HandleNullAssert(operation, rhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
+                if (IsNullLiteral(operation.RightOperand) && AccessPath.FromOperation(operation.LeftOperand) is AccessPath leftPath) {
+                    if (leftPath.IsParameter) {
+                        // check for 'Debug.Assert(someParam != null);' and similar constructs
+                        HandleNullAssert(operation, lhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
+                    }
+                    if (argument == EdgeBuildingContext.Condition) {
+                        SetFlowStateForNullCheck(leftPath, operation.OperatorKind);
+                    }
+                } else if (IsNullLiteral(operation.LeftOperand) && AccessPath.FromOperation(operation.RightOperand) is AccessPath rightPath) {
+                    if (rightPath.IsParameter) {
+                        // check for 'Debug.Assert(someParam != null);' and similar constructs
+                        HandleNullAssert(operation, rhs, valueOnNull: operation.OperatorKind == BinaryOperatorKind.Equals);
+                    }
+                    if (argument == EdgeBuildingContext.Condition) {
+                        SetFlowStateForNullCheck(rightPath, operation.OperatorKind);
+                    }
                 }
             }
             return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        /// <summary>
+        /// Set the flow state after a "path op null" check.
+        /// Sets flowStateReturnedOnTrue/flowStateReturnedOnFalse, only call this method in EdgeBuildingContext.Condition!
+        /// </summary>
+        private void SetFlowStateForNullCheck(AccessPath path, BinaryOperatorKind operatorKind)
+        {
+            flowState.SetNode(path, typeSystem.NonNullNode, clearMembers: false);
+            var flowStateOnNotNull = flowState.SaveSnapshot();
+            flowState.SetNode(path, typeSystem.NullableNode, clearMembers: true);
+            var flowStateOnNull = flowState.SaveSnapshot();
+
+            if (operatorKind == BinaryOperatorKind.Equals) { // path == null
+                flowStateReturnedOnTrue = flowStateOnNull;
+                flowStateReturnedOnFalse = flowStateOnNotNull;
+            } else {
+                Debug.Assert(operatorKind == BinaryOperatorKind.NotEquals); // path != null
+                flowStateReturnedOnTrue = flowStateOnNotNull;
+                flowStateReturnedOnFalse = flowStateOnNull;
+            }
         }
 
         private FlowState.Snapshot JoinFlowSnapshots(FlowState.Snapshot a, FlowState.Snapshot b, EdgeLabel label)
@@ -644,14 +676,9 @@ namespace ICSharpCode.NullabilityInference
                     break;
                 }
             }
-            if (operation.Parent is IArgumentOperation argument) {
-                foreach (var attr in argument.Parameter.GetAttributes()) {
-                    if (attr.ConstructorArguments.Length == 1 && attr.AttributeClass?.GetFullName() == "System.Diagnostics.CodeAnalysis.DoesNotReturnIfAttribute") {
-                        if (attr.ConstructorArguments.Single().Value is bool val && val == valueOnNull) {
-                            tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode, new EdgeLabel("DoesNotReturnIf", operation));
-                            break;
-                        }
-                    }
+            if (operation.Parent is IArgumentOperation argument && argument.Parameter.HasDoesNotReturnIfAttribute(out bool parameterValue)) {
+                if (parameterValue == valueOnNull) {
+                    tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode, new EdgeLabel("DoesNotReturnIf on param", operation));
                 }
             }
         }
@@ -896,6 +923,9 @@ namespace ICSharpCode.NullabilityInference
             if (typeSystem.GetNotNullIfNotNullParam(operation.TargetMethod.OriginalDefinition) is { } notNullParam) {
                 returnType = returnType.WithNode(argumentTypes[notNullParam.Ordinal].Node);
             }
+            if (operation.TargetMethod.HasDoesNotReturnAttribute()) {
+                flowState.MakeUnreachable();
+            }
 
             return returnType;
         }
@@ -982,7 +1012,15 @@ namespace ICSharpCode.NullabilityInference
                 var param = arg.Parameter.OriginalDefinition;
                 var parameterType = typeSystem.GetSymbolType(param);
                 bool isLValue = param.RefKind == RefKind.Ref || param.RefKind == RefKind.Out;
-                var argumentType = Visit(arg.Value, isLValue ? EdgeBuildingContext.LValue : EdgeBuildingContext.Normal);
+                TypeWithNode argumentType;
+                if (!isLValue && param.Type.SpecialType == SpecialType.System_Boolean && param.HasDoesNotReturnIfAttribute(out bool doesNotReturnOn)) {
+                    var (onArgTrue, onArgFalse) = VisitCondition(arg.Value);
+                    // only keep the flow-state from the variant where the function returns
+                    flowState.RestoreSnapshot(doesNotReturnOn ? onArgFalse : onArgTrue);
+                    argumentType = new TypeWithNode(param.Type, typeSystem.ObliviousNode); // bool
+                } else {
+                    argumentType = Visit(arg.Value, isLValue ? EdgeBuildingContext.LValue : EdgeBuildingContext.Normal);
+                }
                 argumentTypes.Add(argumentType);
                 // Create an assignment edge from argument to parameter.
                 // We use the parameter's original type + substitution so that a type parameter `T` appearing in

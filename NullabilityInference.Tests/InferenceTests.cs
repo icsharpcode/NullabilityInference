@@ -393,6 +393,40 @@ namespace System.Diagnostics.CodeAnalysis {
         }
 
         [Fact]
+        public void AssertField()
+        {
+            CheckPaths(@"
+using System;
+class Program {
+    string field;
+    public void Init()
+    {
+        field = string.Empty;
+    }
+    public string Test(bool b)
+    {
+        if (b) {
+            Assert(field != null);
+        } else {
+            field = Fallback();
+        }
+        return field;
+    }
+    string Fallback() => string.Empty;
+    static void Assert([System.Diagnostics.CodeAnalysis.DoesNotReturnIf(parameterValue: false)] bool b)
+    {
+        while(!b);
+    }
+}
+namespace System.Diagnostics.CodeAnalysis {
+    sealed class DoesNotReturnIfAttribute : Attribute {
+        public DoesNotReturnIfAttribute(bool parameterValue) => ParameterValue = parameterValue;
+        public bool ParameterValue { get; }
+    }
+}", returnNullable: false);
+        }
+
+        [Fact]
         public void CallInheritedMethod()
         {
             AssertNullabilityInference(@"

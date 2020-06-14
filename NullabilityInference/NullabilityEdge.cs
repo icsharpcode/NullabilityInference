@@ -49,7 +49,7 @@ namespace ICSharpCode.NullabilityInference
         }
     }
 
-    internal struct EdgeLabel
+    internal readonly struct EdgeLabel
     {
         private readonly string text;
 

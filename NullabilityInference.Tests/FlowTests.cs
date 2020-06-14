@@ -261,6 +261,25 @@ class DataStructure
         }
 
         [Fact]
+        public void InferNotNullWhenTrueFromComparisonInReturn()
+        {
+            string program = @"
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+class DataStructure
+{
+    public bool TryGet(string? input, [Attr] out string? name)
+    {
+        name = input;
+        return name != null;
+    }
+}";
+            AssertNullabilityInference(
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]"),
+                inputProgram: program.Replace("[Attr] ", ""));
+        }
+
+        [Fact]
         public void UseNotNullIfNotNull()
         {
             string program = @"

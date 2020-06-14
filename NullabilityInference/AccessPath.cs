@@ -47,11 +47,14 @@ namespace ICSharpCode.NullabilityInference
         public readonly AccessPathRoot Root;
         public readonly ImmutableArray<ISymbol> Symbols;
 
+
         public AccessPath(AccessPathRoot root, ImmutableArray<ISymbol> symbols)
         {
             this.Root = root;
             this.Symbols = symbols;
         }
+
+        public bool IsParameter => Root == AccessPathRoot.Local && Symbols.Length == 1 && Symbols[0].Kind == SymbolKind.Parameter;
 
         public static AccessPath? FromOperation(IOperation? operation)
         {
