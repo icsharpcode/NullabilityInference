@@ -1175,6 +1175,31 @@ class Program {
         }
 
         [Fact]
+        public void DeconstructNonTuple()
+        {
+            AssertNullabilityInference(@"
+public class AnyContext
+{
+    public void Caller()
+    {
+        (float f, int i) = new Deconstructable<float>(3f);
+    }
+}
+
+public class Deconstructable<T>
+{
+    public Deconstructable(T t) => _t = t;
+    private T _t;
+
+    public void Deconstruct(out T x, out int y)
+    {
+        x = _t;
+        y = 5;
+    }
+}");
+        }
+
+        [Fact]
         public void SeeAlsoCref()
         {
             AssertNullabilityInference(@"
