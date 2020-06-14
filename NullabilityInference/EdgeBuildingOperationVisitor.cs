@@ -957,7 +957,7 @@ namespace ICSharpCode.NullabilityInference
             return methodTypeArgNodes;
         }
 
-        private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, TypeWithNode[] delegateParameters)
+        private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, IReadOnlyCollection<TypeWithNode> delegateParameters)
         {
             var receiverType = GetReceiverType(operation);
             var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.Method);
@@ -970,7 +970,7 @@ namespace ICSharpCode.NullabilityInference
             var substitution = new TypeSubstitution(classTypeArgNodes, methodTypeArgNodes);
             EdgeLabel label = new EdgeLabel($"MethodGroup", operation);
 
-            Debug.Assert(operation.Method.Parameters.Length == delegateParameters.Length);
+            Debug.Assert(operation.Method.Parameters.Length == delegateParameters.Count);
             foreach (var (methodParam, delegateParam) in operation.Method.Parameters.Zip(delegateParameters)) {
                 var methodParamType = typeSystem.GetSymbolType(methodParam.OriginalDefinition);
                 methodParamType = methodParamType.WithSubstitution(methodParam.Type, substitution, tsBuilder);
@@ -1564,7 +1564,7 @@ namespace ICSharpCode.NullabilityInference
             var lhs = Visit(operation.Target, EdgeBuildingContext.LValue);
             var rhs = Visit(operation.Value, EdgeBuildingContext.Normal);
             if (lhs.Type?.IsTupleType == true) {
-                var rhsTypes = rhs.Type?.IsTupleType == true ? rhs.TypeArguments : GetDeconstructParameters(operation, lhs.TypeArguments.Count);
+                var rhsTypes = rhs.Type?.IsTupleType == true ? rhs.TypeArguments : GetDeconstructParameters(operation, rhs.TypeArguments, lhs.TypeArguments.Count);
                 Debug.Assert(lhs.TypeArguments.Count == rhsTypes.Count);
                 foreach (var (lhsElement, rhsElement) in lhs.TypeArguments.Zip(rhsTypes)) {
                     tsBuilder.CreateAssignmentEdge(rhsElement, lhsElement, new EdgeLabel("DeconstructionAssign", operation));
@@ -1576,13 +1576,18 @@ namespace ICSharpCode.NullabilityInference
                 return rhs;
             } else {
                 throw new NotImplementedException("Could not deconstruct into non-tuple type near " + operation.Syntax?.GetLocation().StartPosToString());
-            }            
+            }
         }
 
-        private IReadOnlyCollection<TypeWithNode> GetDeconstructParameters(IDeconstructionAssignmentOperation deconstructOperation, int parameterCount)
+        private IReadOnlyCollection<TypeWithNode> GetDeconstructParameters(IDeconstructionAssignmentOperation deconstructOperation, IReadOnlyList<TypeWithNode> typeArguments, int parameterCount)
         {
-            return GetDeconstructorMethod(deconstructOperation, parameterCount).Parameters.Select(p => typeSystem.GetSymbolType(p)).ToArray();
+            var deconstructMethodSymbol = GetDeconstructorMethod(deconstructOperation, parameterCount);
+            var substitution = new TypeSubstitution(typeArguments, new TypeWithNode[0]);
+            return GetGenericParametersSymbolTypes(deconstructMethodSymbol.Parameters, substitution);
         }
+
+        private IReadOnlyCollection<TypeWithNode> GetGenericParametersSymbolTypes(ImmutableArray<IParameterSymbol> parameters, TypeSubstitution substitution)
+            => parameters.Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution, tsBuilder)).ToArray();
 
         /// <remarks>
         /// Request for full version of this to be added to the Roslyn API: https://github.com/dotnet/roslyn/issues/33590
