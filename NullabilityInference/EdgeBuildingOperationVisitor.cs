@@ -1584,6 +1584,9 @@ namespace ICSharpCode.NullabilityInference
             return GetDeconstructorMethod(deconstructOperation, parameterCount).Parameters.Select(p => typeSystem.GetSymbolType(p)).ToArray();
         }
 
+        /// <remarks>
+        /// Request for full version of this to be added to the Roslyn API: https://github.com/dotnet/roslyn/issues/33590
+        /// </remarks>
         private static IMethodSymbol GetDeconstructorMethod(IDeconstructionAssignmentOperation deconstructOperation, int parameterCount)
         {
             return deconstructOperation.Value.Type.GetMembers("Deconstruct").OfType<IMethodSymbol>()

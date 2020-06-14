@@ -562,7 +562,7 @@ namespace ICSharpCode.NullabilityInference
                     target = targetSubstitution.Value[tp.TypeParameterKind, tp.FullOrdinal()];
                     targetSubstitution = null;
                 }
-                Debug.Assert(source.Type?.TypeKind == target.Type?.TypeKind);
+                Debug.Assert(source.Type?.TypeKind == target.Type?.TypeKind, "Type kinds do not match");
                 if (source.Type is INamedTypeSymbol namedType) {
                     if (!SymbolEqualityComparer.Default.Equals(source.Type?.OriginalDefinition, target.Type?.OriginalDefinition)) {
                         throw new InvalidOperationException($"Types don't match: {source.Type} vs. {target.Type}");
