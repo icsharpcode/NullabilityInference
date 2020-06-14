@@ -69,6 +69,10 @@ Remarks:
         [Option("-e|--add-nullable-enable", "Add '#nullable enable' to the top of each source file.", CommandOptionType.NoValue)]
         public bool AddNullableEnable { get; }
 
+        [Option("-s|--strategy", "Select how conflicts are resolved when a node both could be assigned null, but is also used where a non-nullable value is required. (-s:MinimizeWarnings, -s:PreferNull, -s:PreferNotNull). "
+             + "The default is MinimizeWarnings.", CommandOptionType.SingleValue)]
+        public ConflictResolutionStrategy Strategy { get; } = ConflictResolutionStrategy.MinimizeWarnings;
+
 #if DEBUG
         [Option("-g|--show-graph", "Show type graph. Requires GraphViz dot.exe in PATH.", CommandOptionType.NoValue)]
         public bool ShowGraph { get; }
@@ -130,20 +134,28 @@ Remarks:
             }
             await Console.Error.WriteLineAsync("Inferring nullabilities...");
             var engine = new NullCheckingEngine(compilation);
-            engine.Analyze(cancellationToken);
+            engine.Analyze(this.Strategy, cancellationToken);
 #if DEBUG
             if (ShowGraph) {
                 await Console.Error.WriteLineAsync("Showing graph...");
                 engine.ExportTypeGraph().Show();
             }
 #endif
+            Statistics stats;
             if (DryRun) {
+                await Console.Error.WriteLineAsync("Computing statistics...");
+                stats = engine.ConvertSyntaxTrees(cancellationToken, tree => { });
                 await Console.Error.WriteLineAsync("Analysis successful. Results are discarded due to --dry-run.");
+                await Console.Error.WriteLineAsync("Would use:");
             } else {
                 await Console.Error.WriteLineAsync("Writing modified code...");
-                engine.ConvertSyntaxTrees(cancellationToken).ForAll(tree => WriteTree(tree, cancellationToken));
+                stats = engine.ConvertSyntaxTrees(cancellationToken, tree => WriteTree(tree, cancellationToken));
+                await Console.Error.WriteLineAsync("Success!");
+                await Console.Error.WriteLineAsync("Used:");
             }
-            await Console.Error.WriteLineAsync("Success!");
+            await Console.Error.WriteLineAsync($"  {stats.NullableCount} nullable reference types.");
+            await Console.Error.WriteLineAsync($"  {stats.NonNullCount} non-nullable reference types.");
+            await Console.Error.WriteLineAsync($"  {stats.NotNullWhenCount} [NotNullWhen] attributes.");
 
             return 0;
         }

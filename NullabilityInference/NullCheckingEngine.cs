@@ -27,6 +27,25 @@ using Microsoft.CodeAnalysis.CSharp;
 
 namespace ICSharpCode.NullabilityInference
 {
+    /// <summary>
+    /// Determines how to handle conflicted nodes (nodes that could be assigned null, but that also are used where a non-null type is required).
+    /// </summary>
+    public enum ConflictResolutionStrategy
+    {
+        /// <summary>
+        /// Minimize the number of constraint violations: uses minimum cut of constraint graph.
+        /// </summary>
+        MinimizeWarnings,
+        /// <summary>
+        /// Conflicted nodes are marked null.
+        /// </summary>
+        PreferNull,
+        /// <summary>
+        /// Conflicted nodes are marked not-null.
+        /// </summary>
+        PreferNotNull,
+    }
+
     public sealed class NullCheckingEngine
     {
         private readonly CSharpCompilation compilation;
@@ -48,7 +67,7 @@ namespace ICSharpCode.NullabilityInference
         /// <summary>
         /// Constructs the null-type flow graph and infers nullabilities for the nodes.
         /// </summary>
-        public void Analyze(CancellationToken cancellationToken)
+        public void Analyze(ConflictResolutionStrategy strategy, CancellationToken cancellationToken)
         {
             Parallel.ForEach(compilation.SyntaxTrees,
                 new ParallelOptions { CancellationToken = cancellationToken },
@@ -58,18 +77,31 @@ namespace ICSharpCode.NullabilityInference
                 new ParallelOptions { CancellationToken = cancellationToken },
                 t => CreateEdges(t, cancellationToken));
 
-            MaximumFlow.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
+            switch (strategy) {
+                case ConflictResolutionStrategy.MinimizeWarnings:
+                    MaximumFlow.Compute(typeSystem.AllNodes, typeSystem.NullableNode, typeSystem.NonNullNode, cancellationToken);
 
-            // Infer non-null first using the residual graph.
-            InferNonNullUsingResidualGraph(typeSystem.NonNullNode);
-            // Then use the original graph to infer nullable types everywhere we didn't already infer non-null.
-            // This ends up creating the minimum cut.
-            InferNullable(typeSystem.NullableNode);
-            // Note that for longer chains (null -> A -> B -> C -> nonnull)
-            // this approach ends up cutting the graph as close to nonnull as possible when there's multiple
-            // choices with the same number of warnings. This is why we use the "reverse" residual graph
-            // (ResidualGraphPredecessors) -- using ResidualGraphSuccessors would end up cutting closer to the <null> node.
-
+                    // Infer non-null first using the residual graph.
+                    InferNonNullUsingResidualGraph(typeSystem.NonNullNode);
+                    // Then use the original graph to infer nullable types everywhere we didn't already infer non-null.
+                    // This ends up creating the minimum cut.
+                    InferNullable(typeSystem.NullableNode);
+                    // Note that for longer chains (null -> A -> B -> C -> nonnull)
+                    // this approach ends up cutting the graph as close to nonnull as possible when there's multiple
+                    // choices with the same number of warnings. This is why we use the "reverse" residual graph
+                    // (ResidualGraphPredecessors) -- using ResidualGraphSuccessors would end up cutting closer to the <null> node.
+                    break;
+                case ConflictResolutionStrategy.PreferNull:
+                    InferNullable(typeSystem.NullableNode);
+                    InferNonNull(typeSystem.NonNullNode);
+                    break;
+                case ConflictResolutionStrategy.PreferNotNull:
+                    InferNonNull(typeSystem.NonNullNode);
+                    InferNullable(typeSystem.NullableNode);
+                    break;
+                default:
+                    throw new NotSupportedException(strategy.ToString());
+            }
 
             // There's going to be a bunch of remaining nodes where either choice would work.
             // For parameters, prefer marking those as nullable:
@@ -102,16 +134,24 @@ namespace ICSharpCode.NullabilityInference
         }
 
         /// <summary>
-        /// Returns new syntax trees where the inferred nullability has been inserted.
+        /// Invokes the callback with the new syntax trees where the inferred nullability has been inserted.
         /// </summary>
-        public ParallelQuery<SyntaxTree> ConvertSyntaxTrees(CancellationToken cancellationToken)
+        public Statistics ConvertSyntaxTrees(CancellationToken cancellationToken, Action<SyntaxTree> action)
         {
-            return compilation.SyntaxTrees.AsParallel().WithCancellation(cancellationToken).Select(syntaxTree => {
-                var semanticModel = compilation.GetSemanticModel(syntaxTree);
-                var rewriter = new InferredNullabilitySyntaxRewriter(semanticModel, typeSystem, typeSystem.GetMapping(syntaxTree), cancellationToken);
-                var newRoot = rewriter.Visit(syntaxTree.GetRoot());
-                return syntaxTree.WithRootAndOptions(newRoot, syntaxTree.Options);
-            });
+            object statsLock = new object();
+            Statistics statistics = new Statistics();
+            Parallel.ForEach(compilation.SyntaxTrees,
+                new ParallelOptions { CancellationToken = cancellationToken },
+                syntaxTree => {
+                    var semanticModel = compilation.GetSemanticModel(syntaxTree);
+                    var rewriter = new InferredNullabilitySyntaxRewriter(semanticModel, typeSystem, typeSystem.GetMapping(syntaxTree), cancellationToken);
+                    var newRoot = rewriter.Visit(syntaxTree.GetRoot());
+                    action(syntaxTree.WithRootAndOptions(newRoot, syntaxTree.Options));
+                    lock (statsLock) {
+                        statistics.Update(rewriter.Statistics);
+                    }
+                });
+            return statistics;
         }
 
         private void InferNonNull(NullabilityNode node)

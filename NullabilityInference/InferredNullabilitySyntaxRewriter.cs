@@ -35,6 +35,7 @@ namespace ICSharpCode.NullabilityInference
         private readonly TypeSystem typeSystem;
         private readonly SyntaxToNodeMapping mapping;
         private readonly CancellationToken cancellationToken;
+        private Statistics stats = new Statistics();
 
         public InferredNullabilitySyntaxRewriter(SemanticModel semanticModel, TypeSystem typeSystem, SyntaxToNodeMapping mapping, CancellationToken cancellationToken)
             : base(visitIntoStructuredTrivia: true)
@@ -44,6 +45,8 @@ namespace ICSharpCode.NullabilityInference
             this.mapping = mapping;
             this.cancellationToken = cancellationToken;
         }
+
+        public ref readonly Statistics Statistics => ref stats;
 
         private bool isActive = true;
 
@@ -96,10 +99,13 @@ namespace ICSharpCode.NullabilityInference
             if (symbolInfo.Symbol is ITypeSymbol ty && ty.CanBeMadeNullable() && newNode is TypeSyntax newTypeSyntax) {
                 var nullNode = mapping[node];
                 if (nullNode.NullType == NullType.Nullable) {
+                    stats.NullableCount++;
                     return SyntaxFactory.NullableType(
                         elementType: newTypeSyntax.WithoutTrailingTrivia(),
                         questionToken: SyntaxFactory.Token(SyntaxKind.QuestionToken)
                     ).WithTrailingTrivia(newTypeSyntax.GetTrailingTrivia());
+                } else {
+                    stats.NonNullCount++;
                 }
             }
             return newNode;
@@ -111,10 +117,13 @@ namespace ICSharpCode.NullabilityInference
             if (isActive && GraphBuildingSyntaxVisitor.CanBeMadeNullableSyntax(node) && newNode is TypeSyntax newTypeSyntax) {
                 var nullNode = mapping[node];
                 if (nullNode.NullType == NullType.Nullable) {
+                    stats.NullableCount++;
                     return SyntaxFactory.NullableType(
                         elementType: newTypeSyntax.WithoutTrailingTrivia(),
                         questionToken: SyntaxFactory.Token(SyntaxKind.QuestionToken)
                     ).WithTrailingTrivia(newTypeSyntax.GetTrailingTrivia());
+                } else {
+                    stats.NonNullCount++;
                 }
             }
             return newNode;
@@ -135,6 +144,7 @@ namespace ICSharpCode.NullabilityInference
                     var newAttributeList = SyntaxFactory.AttributeList(SyntaxFactory.SingletonSeparatedList(newAttribute));
                     node = node.AddAttributeLists(newAttributeList.WithTrailingTrivia(SyntaxFactory.Space));
                     needsUsingCodeAnalysis = true;
+                    stats.NotNullWhenCount++;
                 }
             }
             return node;

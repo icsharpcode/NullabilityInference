@@ -69,7 +69,7 @@ namespace ICSharpCode.NullabilityInference.Tests
                 Assert.False(diag.Severity == DiagnosticSeverity.Error, diag.ToString() + "\r\n\r\nSource:\r\n" + program);
             }
             var engine = new NullCheckingEngine(compilation);
-            engine.Analyze(cancellationToken);
+            engine.Analyze(ConflictResolutionStrategy.MinimizeWarnings, cancellationToken);
             return (compilation, engine);
         }
 
@@ -77,8 +77,9 @@ namespace ICSharpCode.NullabilityInference.Tests
         {
             inputProgram ??= Regex.Replace(expectedProgram, @"(?<![?\s])[?](?![?.\(\)])", "");
             var (_, engine) = CompileAndAnalyze(inputProgram, cancellationToken);
-            var newSyntax = engine.ConvertSyntaxTrees(cancellationToken).Single();
-            string outputProgram = newSyntax.GetText(cancellationToken).ToString();
+            var newSyntaxes = new List<SyntaxTree>();
+            engine.ConvertSyntaxTrees(cancellationToken, tree => { lock (newSyntaxes) newSyntaxes.Add(tree); });
+            string outputProgram = newSyntaxes.Single().GetText(cancellationToken).ToString();
             // engine.ExportTypeGraph().Show();
             Assert.Equal(expectedProgram, outputProgram);
         }
