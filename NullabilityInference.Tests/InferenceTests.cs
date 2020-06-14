@@ -591,6 +591,41 @@ public class SomeContext
 ");
         }
 
+        /// <summary>
+        /// FUTURE: NotNullWhenNotNullAttribute on IfNull would allow Array to be marked non-null
+        /// </summary>
+        [Fact]
+        public void ExtensionMethodDelegate()
+        {
+            AssertNullabilityInference(@"
+using System.Linq;
+
+public static class SomeStatic
+{
+    public static void Main()
+    {
+        object?[] x = new[] { new object() }.Select(7.IfNull).ToArray();
+    }
+    public static object? IfNull(this object? a, object? b) => b ?? a;
+}");
+        }
+
+        [Fact]
+        public void InstanceMethodDelegate()
+        {
+            AssertNullabilityInference(@"
+using System.Linq;
+
+public class SomeInstance
+{
+    public void Caller()
+    {
+        object[] x = new[] { new object() }.Select(IfNull).ToArray();
+    }
+    public object IfNull(object? b) => b ?? this;
+}");
+        }
+
         [Fact]
         public void CompareNullableValueTypeToNullDoesNotThrow()
         {
