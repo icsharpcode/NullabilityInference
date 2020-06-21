@@ -73,7 +73,7 @@ namespace ICSharpCode.NullabilityInference.Tests
             return (compilation, engine);
         }
 
-        protected static void AssertNullabilityInference(string expectedProgram, string inputProgram = null, CancellationToken cancellationToken = default)
+        protected static void AssertNullabilityInference(string expectedProgram, string inputProgram = null, bool? hasWarnings = false, CancellationToken cancellationToken = default)
         {
             inputProgram ??= Regex.Replace(expectedProgram, @"(?<![?\s])[?](?![?.\(\)])", "");
             var (_, engine) = CompileAndAnalyze(inputProgram, cancellationToken);
@@ -81,6 +81,13 @@ namespace ICSharpCode.NullabilityInference.Tests
             engine.ConvertSyntaxTrees(cancellationToken, tree => { lock (newSyntaxes) newSyntaxes.Add(tree); });
             string outputProgram = newSyntaxes.Single().GetText(cancellationToken).ToString();
             // engine.ExportTypeGraph().Show();
+            if (hasWarnings != null) {
+                bool actual = ReachableNodes(engine.TypeSystem.NullableNode, n => n.Successors).Contains(engine.TypeSystem.NonNullNode);
+                if (hasWarnings != actual) {
+                    throw new AssertActualExpectedException(hasWarnings, actual,
+                        actual ? "Unexpected path from <nullable> to <nonnull>" : "Missing path from <nullable> to <nonnull>");
+                }
+            }
             Assert.Equal(expectedProgram, outputProgram);
         }
 
@@ -105,7 +112,7 @@ namespace ICSharpCode.NullabilityInference.Tests
             ResultDependsOnInput = 4,
         }
 
-        protected static void CheckPaths(string program, bool? inputMustBeNonNull = null, bool? returnNullable = null, bool? returnDependsOnInput = null)
+        protected static void CheckPaths(string program, bool? inputMustBeNonNull = null, bool? returnNullable = null, bool? returnDependsOnInput = null, bool? hasWarnings = false)
         {
             var (compilation, engine) = CompileAndAnalyze(program);
             var programClass = compilation.GetTypeByMetadataName("Program");
@@ -134,6 +141,13 @@ namespace ICSharpCode.NullabilityInference.Tests
                 if (returnDependsOnInput != actual) {
                     throw new AssertActualExpectedException(returnDependsOnInput, actual,
                         actual ? "Unexpected path from parameter to return" : "Missing path from parameter to return");
+                }
+            }
+            if (hasWarnings != null) {
+                bool actual = ReachableNodes(engine.TypeSystem.NullableNode, n => n.Successors).Contains(engine.TypeSystem.NonNullNode);
+                if (hasWarnings != actual) {
+                    throw new AssertActualExpectedException(hasWarnings, actual,
+                        actual ? "Unexpected path from <nullable> to <nonnull>" : "Missing path from <nullable> to <nonnull>");
                 }
             }
         }

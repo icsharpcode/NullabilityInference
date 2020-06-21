@@ -298,5 +298,50 @@ class Program
 }";
             AssertNullabilityInference(program, program);
         }
+
+        [Fact]
+        public void OutIntoVar()
+        {
+            string program = @"
+using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
+class DataStructure
+{
+    public bool TryGet(string? input, [Attr] out string? name)
+    {
+        name = input;
+        return name != null;
+    }
+    public int Use()
+    {
+        var x = string.Empty;
+        if (TryGet(null, out x))
+        {
+            return x.Length;
+        }
+        return 0;
+    }
+}";
+            AssertNullabilityInference(
+                expectedProgram: program.Replace("[Attr]", "[NotNullWhen(true)]"),
+                inputProgram: program.Replace("[Attr] ", ""));
+        }
+
+        [Fact]
+        public void VarReassignment()
+        {
+            AssertNullabilityInference(@"
+class Program
+{
+    public string? Test()
+    {
+        var name = GetString();
+        int len = name.Length;
+        name = null;
+        return name;
+    }
+    string GetString() => string.Empty;
+}");
+        }
     }
 }

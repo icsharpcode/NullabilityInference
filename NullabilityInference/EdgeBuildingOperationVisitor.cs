@@ -1504,11 +1504,20 @@ namespace ICSharpCode.NullabilityInference
         {
             if (operation.Syntax is VariableDeclarationSyntax { Type: SimpleNameSyntax { IsVar: true } }) {
                 // Implicitly typed local variable.
-                // We syntactically can't use "var?", an implicitly typed variable is forced to use
-                // the same nullability as inferred from its initializer expression.
+                // We syntactically can't use "var?", an implicitly typed variable is
+                // implicitly always declared as nullable (and can be non-nullable only due to its
+                // flow-state).
                 foreach (var decl in operation.Declarators) {
                     var init = Visit(decl.Initializer, EdgeBuildingContext.Normal);
-                    localVarTypes.Add(decl.Symbol, init);
+
+                    // But because our own flow-state isn't tracked perfectly but resets to the declared state
+                    // under some circumstances (e.g. loops), we use a helper node instead of typeSystem.NullableNode.
+                    var helperNode = tsBuilder.CreateHelperNode();
+                    helperNode.SetName(decl.Symbol.Name);
+                    tsBuilder.CreateEdge(init.Node, helperNode, new EdgeLabel("var init", decl));
+
+                    flowState.SetNode(new AccessPath(AccessPathRoot.Local, ImmutableArray.Create<ISymbol>(decl.Symbol)), init.Node, clearMembers: true);
+                    localVarTypes.Add(decl.Symbol, init.WithNode(helperNode));
                     localVariables.Add(decl.Symbol);
                 }
             } else {

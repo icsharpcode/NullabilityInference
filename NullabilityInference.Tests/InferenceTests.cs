@@ -915,7 +915,7 @@ class Program {
         string? b = a;
         return b.Length;
     }
-}");
+}", hasWarnings: true);
         }
 
         [Fact]
