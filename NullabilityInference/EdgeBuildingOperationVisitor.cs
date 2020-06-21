@@ -963,9 +963,15 @@ namespace ICSharpCode.NullabilityInference
             return methodTypeArgNodes;
         }
 
-        private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, IReadOnlyCollection<TypeWithNode> delegateParameters)
+        private void HandleMethodGroup(IMethodReferenceOperation operation, TypeWithNode delegateReturnType, List<TypeWithNode> delegateParameters)
         {
-            var receiverType = GetReceiverType(operation);
+            TypeWithNode? receiverType;
+            if (operation.Instance != null && operation.Method.IsExtensionMethod) {
+                receiverType = null;
+                delegateParameters.Insert(0, Visit(operation.Instance, EdgeBuildingContext.Normal));
+            } else {
+                receiverType = GetReceiverType(operation);
+            }
             var classTypeArgNodes = ClassTypeArgumentsForMemberAccess(receiverType, operation.Method);
             TypeWithNode[]? methodTypeArgNodes = null;
             if (operation.Syntax is ExpressionSyntax es) {
@@ -1701,7 +1707,6 @@ namespace ICSharpCode.NullabilityInference
                     }
                     break;
                 case IMethodReferenceOperation methodReference:
-                    if (methodReference.Instance != null && methodReference.Method.IsExtensionMethod) delegateParameters.Insert(0, methodReference.Instance.Accept(this, EdgeBuildingContext.Normal));
                     HandleMethodGroup(methodReference, delegateReturnType, delegateParameters);
                     break;
                 default:
