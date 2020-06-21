@@ -417,46 +417,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitReturn(IReturnOperation operation, EdgeBuildingContext argument)
         {
-            if (operation.ReturnedValue != null) {
-                var returnType = syntaxVisitor.currentMethodReturnType;
-                if (operation.Kind == OperationKind.Return && returnType.Type?.SpecialType == SpecialType.System_Boolean && syntaxVisitor.currentMethod != null) {
-                    // When returning a boolean, export flow-states for out parameters
-                    var (onTrue, onFalse) = VisitCondition(operation.ReturnedValue);
-                    foreach (var param in syntaxVisitor.currentMethod.Parameters) {
-                        if (!typeSystem.TryGetOutParameterFlowNodes(param, out var outNodes))
-                            continue;
-                        var path = new AccessPath(AccessPathRoot.Local, ImmutableArray.Create<ISymbol>(param));
-                        if (!onTrue.Unreachable) {
-                            flowState.RestoreSnapshot(onTrue);
-                            if (!flowState.TryGetNode(path, out var node)) {
-                                node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
-                            }
-                            tsBuilder.CreateEdge(node, outNodes.whenTrue, new EdgeLabel($"flow-state of {param.Name} on return true", operation));
-                        }
-                        if (!onFalse.Unreachable) {
-                            flowState.RestoreSnapshot(onFalse);
-                            if (!flowState.TryGetNode(path, out var node)) {
-                                node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
-                            }
-                            tsBuilder.CreateEdge(node, outNodes.whenFalse, new EdgeLabel($"flow-state of {param.Name} on return false", operation));
-                        }
-                    }
-                    // no need to create edge for return value, as `bool` is a value-type
-                    return typeSystem.VoidType;
-                }
-                var returnVal = Visit(operation.ReturnedValue, EdgeBuildingContext.Normal);
-                if (operation.Kind == OperationKind.YieldReturn) {
-                    if (returnType.TypeArguments.Count == 0) {
-                        // returning non-generic enumerable
-                        return typeSystem.VoidType;
-                    }
-                    returnType = returnType.TypeArguments.Single();
-                }
-                tsBuilder.CreateAssignmentEdge(
-                    source: returnVal,
-                    target: returnType,
-                    label: new EdgeLabel("return", operation));
-            }
+            CreateEdgeForReturnValue(operation);
             switch (operation.Kind) {
                 case OperationKind.Return:
                 case OperationKind.YieldBreak:
@@ -468,6 +429,51 @@ namespace ICSharpCode.NullabilityInference
                     throw new NotSupportedException(operation.Kind.ToString());
             }
             return typeSystem.VoidType;
+        }
+
+        private void CreateEdgeForReturnValue(IReturnOperation operation)
+        {
+            if (operation.ReturnedValue == null) {
+                return;
+            }
+            var returnType = syntaxVisitor.currentMethodReturnType;
+            if (operation.Kind == OperationKind.Return && returnType.Type?.SpecialType == SpecialType.System_Boolean && syntaxVisitor.currentMethod != null) {
+                // When returning a boolean, export flow-states for out parameters
+                var (onTrue, onFalse) = VisitCondition(operation.ReturnedValue);
+                foreach (var param in syntaxVisitor.currentMethod.Parameters) {
+                    if (!typeSystem.TryGetOutParameterFlowNodes(param, out var outNodes))
+                        continue;
+                    var path = new AccessPath(AccessPathRoot.Local, ImmutableArray.Create<ISymbol>(param));
+                    if (!onTrue.Unreachable) {
+                        flowState.RestoreSnapshot(onTrue);
+                        if (!flowState.TryGetNode(path, out var node)) {
+                            node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
+                        }
+                        tsBuilder.CreateEdge(node, outNodes.whenTrue, new EdgeLabel($"flow-state of {param.Name} on return true", operation));
+                    }
+                    if (!onFalse.Unreachable) {
+                        flowState.RestoreSnapshot(onFalse);
+                        if (!flowState.TryGetNode(path, out var node)) {
+                            node = typeSystem.GetSymbolType(param, ignoreAttributes: true).Node;
+                        }
+                        tsBuilder.CreateEdge(node, outNodes.whenFalse, new EdgeLabel($"flow-state of {param.Name} on return false", operation));
+                    }
+                }
+                // no need to create edge for return value, as `bool` is a value-type
+                return;
+            }
+            var returnVal = Visit(operation.ReturnedValue, EdgeBuildingContext.Normal);
+            if (operation.Kind == OperationKind.YieldReturn) {
+                if (returnType.TypeArguments.Count == 0) {
+                    // returning non-generic enumerable -> no edge needed
+                    return;
+                }
+                returnType = returnType.TypeArguments.Single();
+            }
+            tsBuilder.CreateAssignmentEdge(
+                source: returnVal,
+                target: returnType,
+                label: new EdgeLabel("return", operation));
         }
 
         public override TypeWithNode VisitConditional(IConditionalOperation operation, EdgeBuildingContext argument)
