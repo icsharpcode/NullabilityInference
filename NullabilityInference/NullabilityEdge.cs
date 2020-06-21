@@ -52,18 +52,18 @@ namespace ICSharpCode.NullabilityInference
     internal readonly struct EdgeLabel
     {
         private readonly string text;
+        internal readonly Location? location;
 
         public EdgeLabel(string text)
         {
             this.text = text;
+            this.location = null;
         }
 
         public EdgeLabel(string text, Location? location)
         {
-            if (location == null)
-                this.text = text;
-            else
-                this.text = text + " at " + location.StartPosToString();
+            this.text = text;
+            this.location = location;
         }
 
         internal EdgeLabel(string text, SyntaxNode? syntaxForLocation)
@@ -78,7 +78,10 @@ namespace ICSharpCode.NullabilityInference
 
         public override string ToString()
         {
-            return text;
+            if (location == null)
+                return text;
+            else
+                return text + " at " + location.StartPosToString();
         }
     }
 }

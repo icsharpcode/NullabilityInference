@@ -212,10 +212,79 @@ namespace ICSharpCode.NullabilityInference
             return ExportTypeGraph(n => n.NullType != NullType.Oblivious && n.ReplacedWith == n);
         }
 
+        public GraphVizGraph ExportTypeGraph(Predicate<Location> isInteresting/*, bool addAllPathsUntilNonNull = false, bool addAllPathsFromNullable = false, bool addAllPathsWithFlow = false*/)
+        {
+            var startNodes = new HashSet<NullabilityNode>();
+            var startEdges = new HashSet<NullabilityEdge>();
+            foreach (var node in typeSystem.AllNodes) {
+                if (node.Location != null && isInteresting(node.Location)) {
+                    startNodes.Add(node);
+                }
+                foreach (var edge in node.OutgoingEdges) {
+                    if (edge.Label.location is { } location && isInteresting(location)) {
+                        startEdges.Add(edge);
+                    }
+                }
+            }
+            return ExportTypeGraph(startNodes.Contains, startEdges.Contains);
+            /*var selectedEdges = new HashSet<NullabilityEdge>(selectedEdges);
+            if (addAllPathsWithFlow) {
+                var flowEdges = new HashSet<NullabilityEdge>(GetFlowEdges()) ;
+                AddReachableNodes(n => n.OutgoingEdges.Where(flowEdges.Contains).Select(e => e.Target));
+                AddReachableNodes(n => n.IncomingEdges.Where(flowEdges.Contains).Select(e => e.Source));
+            }
+            if (addAllPathsUntilNonNull) {
+                AddReachableNodes(n => n.Successors);
+            }
+            if (addAllPathsFromNullable) {
+                AddReachableNodes(n => n.Predecessors);
+            }
+            return ExportTypeGraph(selectedNodes.Contains);
+
+            void AddReachableNodes(Func<NullabilityNode, IEnumerable<NullabilityNode>> successors)
+            {
+                var worklist = new Queue<NullabilityNode>(startNodes);
+                while (worklist.Count > 0) {
+                    foreach (var node in successors(worklist.Dequeue())) {
+                        if (selectedNodes.Add(node)) {
+                            worklist.Enqueue(node);
+                        }
+                    }
+                }
+            }*/
+        }
+
+        /// <summary>
+        /// Returns the edges that are missing from the residual graph.
+        /// </summary>
+        private IEnumerable<NullabilityEdge> GetFlowEdges()
+        {
+            var dict = new Dictionary<NullabilityNode, int>();
+            foreach (var node in typeSystem.AllNodes) {
+                dict.Clear();
+                foreach (var n in node.ResidualGraphPredecessors) {
+                    dict.TryGetValue(n, out int i);
+                    dict[n] = i + 1;
+                }
+                foreach (var edge in node.IncomingEdges) {
+                    if (dict.TryGetValue(edge.Source, out int i) && i > 0) {
+                        dict[edge.Source] = i - 1;
+                    } else {
+                        yield return edge;
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// Exports a subset of the type graph in a form suitable for visualization.
         /// </summary>
         public GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter)
+        {
+            return ExportTypeGraph(nodeFilter, e => false);
+        }
+
+        private GraphVizGraph ExportTypeGraph(Predicate<NullabilityNode> nodeFilter, Predicate<NullabilityEdge> edgeFilter)
         {
             if (nodeFilter == null)
                 throw new ArgumentNullException("includeInGraph");
@@ -223,7 +292,7 @@ namespace ICSharpCode.NullabilityInference
             List<NullabilityEdge> graphEdges = new List<NullabilityEdge>();
             foreach (NullabilityNode node in typeSystem.AllNodes) {
                 foreach (NullabilityEdge edge in node.IncomingEdges) {
-                    if (nodeFilter(edge.Source) || nodeFilter(edge.Target)) {
+                    if (nodeFilter(edge.Source) || nodeFilter(edge.Target) || edgeFilter(edge)) {
                         graphEdges.Add(edge);
                     }
                 }
@@ -251,12 +320,15 @@ namespace ICSharpCode.NullabilityInference
                 gvNode.label += $"\n{node.NullType}";
                 graph.AddNode(gvNode);
             }
+            var flowEdges = new HashSet<NullabilityEdge>(GetFlowEdges());
             foreach (NullabilityEdge edge in graphEdges) {
                 var gvEdge = new GraphVizEdge(nodeIds[edge.Source], nodeIds[edge.Target]);
                 gvEdge.label = edge.Label.ToString();
                 gvEdge.fontsize = 8;
                 if (edge.IsError)
                     gvEdge.color = "red";
+                else if (flowEdges.Contains(edge))
+                    gvEdge.color = "yellow";
                 graph.AddEdge(gvEdge);
             }
             return graph;

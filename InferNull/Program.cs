@@ -24,6 +24,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using ICSharpCode.NullabilityInference;
@@ -76,6 +77,12 @@ Remarks:
 #if DEBUG
         [Option("-g|--show-graph", "Show type graph. Requires GraphViz dot.exe in PATH.", CommandOptionType.NoValue)]
         public bool ShowGraph { get; }
+
+        [Option("--filter-graph", "Apply filter, showing only a portion of the graph.", CommandOptionType.MultipleValue)]
+        public List<string> FilterGraph { get; } = new List<string>();
+
+        [Option("--export-graph", "Save type graph to file.", CommandOptionType.SingleValue)]
+        public string? ExportGraph { get; } = null;
 #endif
 
         /// <remarks>Used by reflection in CommandLineApplication.ExecuteAsync</remarks>
@@ -136,9 +143,16 @@ Remarks:
             var engine = new NullCheckingEngine(compilation);
             engine.Analyze(this.Strategy, cancellationToken);
 #if DEBUG
+            GraphVizGraph? exportedGraph = null;
             if (ShowGraph) {
                 await Console.Error.WriteLineAsync("Showing graph...");
-                engine.ExportTypeGraph().Show();
+                exportedGraph ??= ExportTypeGraph(engine);
+                    exportedGraph.Show();
+            }
+            if (ExportGraph != null) {
+                await Console.Error.WriteLineAsync("Exporting graph...");
+                exportedGraph ??= ExportTypeGraph(engine);
+                exportedGraph.Save(ExportGraph);
             }
 #endif
             Statistics stats;
@@ -158,6 +172,35 @@ Remarks:
             await Console.Error.WriteLineAsync($"  {stats.NotNullWhenCount} [NotNullWhen] attributes.");
 
             return 0;
+        }
+
+        private GraphVizGraph ExportTypeGraph(NullCheckingEngine engine)
+        {
+            if (FilterGraph.Count == 0) {
+                // Show complete graph
+                return engine.ExportTypeGraph();
+            } else {
+                // Show filtered graph
+                var list = new List<(string file, int start, int end)>();
+                foreach (var entry in FilterGraph) {
+                    var m = Regex.Match(entry, @"^([\w_.-]+):(\d+)-(\d+)$");
+                    if (!m.Success) {
+                        Console.WriteLine("Invalid value for --show-graph/--export-graph. Expected filename.cs:100-200");
+                    }
+                    list.Add((m.Groups[1].Value, int.Parse(m.Groups[2].Value), int.Parse(m.Groups[3].Value)));
+                }
+                return engine.ExportTypeGraph(location => list.Any(e => MatchesEntry(e, location)));
+
+                static bool MatchesEntry((string file, int start, int end) entry, Location loc)
+                {
+                    var span = loc.GetLineSpan();
+                    if (span.EndLinePosition.Line + 1 < entry.start)
+                        return false;
+                    if (entry.end < span.StartLinePosition.Line + 1)
+                        return false;
+                    return string.Equals(Path.GetFileName(span.Path), entry.file, StringComparison.OrdinalIgnoreCase);
+                }
+            }
         }
 
         private void WriteTree(SyntaxTree tree, CancellationToken cancellationToken)
