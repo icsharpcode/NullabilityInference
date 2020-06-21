@@ -1644,7 +1644,7 @@ namespace ICSharpCode.NullabilityInference
             var delegateReturnType = typeSystem.GetSymbolType(delegateType.DelegateInvokeMethod.OriginalDefinition);
             delegateReturnType = delegateReturnType.WithSubstitution(delegateType.DelegateInvokeMethod.ReturnType, substitution, tsBuilder);
             var delegateParameters = delegateType.DelegateInvokeMethod.Parameters
-                .Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution, tsBuilder)).ToArray();
+                .Select(p => typeSystem.GetSymbolType(p.OriginalDefinition).WithSubstitution(p.Type, substitution, tsBuilder)).ToList();
             switch (operation.Target) {
                 case IAnonymousFunctionOperation lambda:
                     // Create edges for lambda parameters
@@ -1665,7 +1665,7 @@ namespace ICSharpCode.NullabilityInference
                         };
                     }
                     if (parameterList != null) {
-                        Debug.Assert(parameterList.Count == delegateParameters.Length);
+                        Debug.Assert(parameterList.Count == delegateParameters.Count);
                         foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
                             if (lambdaParamSyntax.Type != null) {
                                 var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
@@ -1701,6 +1701,7 @@ namespace ICSharpCode.NullabilityInference
                     }
                     break;
                 case IMethodReferenceOperation methodReference:
+                    if (methodReference.Instance != null && methodReference.Method.IsExtensionMethod) delegateParameters.Insert(0, methodReference.Instance.Accept(this, EdgeBuildingContext.Normal));
                     HandleMethodGroup(methodReference, delegateReturnType, delegateParameters);
                     break;
                 default:
