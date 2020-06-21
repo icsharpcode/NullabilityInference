@@ -174,6 +174,7 @@ Remarks:
             return 0;
         }
 
+#if DEBUG
         private GraphVizGraph ExportTypeGraph(NullCheckingEngine engine)
         {
             if (FilterGraph.Count == 0) {
@@ -202,6 +203,7 @@ Remarks:
                 }
             }
         }
+#endif
 
         private void WriteTree(SyntaxTree tree, CancellationToken cancellationToken)
         {
