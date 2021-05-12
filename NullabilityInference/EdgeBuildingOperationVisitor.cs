@@ -1361,7 +1361,7 @@ namespace ICSharpCode.NullabilityInference
                 if (elementConv.IsNullable)
                     throw new InvalidOperationException("Nullable unwrap failed");
                 CreateConversionEdge(input, target, elementConv, label);
-            } else if (conv.IsNumeric || conv.IsConstantExpression || conv.IsEnumeration) {
+            } else if (conv.IsNumeric || conv.IsConstantExpression || conv.IsEnumeration || conv.IsIntPtr) {
                 // OK, no edge required
                 Debug.Assert(target.Node.NullType == NullType.Oblivious);
             } else if (conv.IsThrow) {
@@ -1786,6 +1786,17 @@ namespace ICSharpCode.NullabilityInference
         }
 
         public override TypeWithNode VisitConstantPattern(IConstantPatternOperation operation, EdgeBuildingContext argument)
+        {
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitAddressOf(IAddressOfOperation operation, EdgeBuildingContext argument)
+        {
+            Visit(operation.Reference, EdgeBuildingContext.LValue);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitSizeOf(ISizeOfOperation operation, EdgeBuildingContext argument)
         {
             return typeSystem.GetObliviousType(operation.Type);
         }

@@ -89,6 +89,9 @@ namespace ICSharpCode.NullabilityInference
         /// </summary>
         internal void ReplaceWith(NullabilityNode other)
         {
+            if (this == other) {
+                return;
+            }
             if (this.replacement != null) {
                 this.replacement.ReplaceWith(other);
                 return;
@@ -114,8 +117,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override Location? Location => null;
 
-        public override string Name => NullType switch
-        {
+        public override string Name => NullType switch {
             NullType.Nullable => "<nullable>",
             NullType.NonNull => "<nonnull>",
             NullType.Oblivious => "<oblivious>",
@@ -157,7 +159,7 @@ namespace ICSharpCode.NullabilityInference
         private readonly long id = Interlocked.Increment(ref nextId);
 
         public override Location? Location => null;
-        
+
         private string symbolName = "helper";
 
         public override string Name => $"<{symbolName}#{id}>";
