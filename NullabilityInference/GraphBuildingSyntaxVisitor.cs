@@ -64,7 +64,7 @@ namespace ICSharpCode.NullabilityInference
         }
 
         protected List<TypeSyntax> CollectTypeArgs(ExpressionSyntax node)
-        { 
+        {
             List<TypeSyntax> typeArgs = new List<TypeSyntax>();
             Visit(node);
             return typeArgs;
@@ -203,6 +203,7 @@ namespace ICSharpCode.NullabilityInference
                 case SyntaxKind.AsExpression: // x as string?
                 case SyntaxKind.UsingDirective: // using System?;
                 case SyntaxKind.DeclarationPattern: // x is string? b
+                case SyntaxKind.RecursivePattern:  // x is string? {} b
                 case SyntaxKind.Argument: // type name can appears as argument in nameof() expression
                     return false;
             }

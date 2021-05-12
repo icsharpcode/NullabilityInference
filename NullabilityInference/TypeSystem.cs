@@ -156,8 +156,7 @@ namespace ICSharpCode.NullabilityInference
         internal TypeWithNode FromType(ITypeSymbol? type, NullableAnnotation nullability, ImmutableArray<AttributeData> attributeData = default)
         {
             var topLevelNode = FromAttributes(attributeData, new SpecialNodes(NullableNode, NonNullNode, ObliviousNode));
-            topLevelNode ??= nullability switch
-            {
+            topLevelNode ??= nullability switch {
                 NullableAnnotation.Annotated => NullableNode,
                 NullableAnnotation.NotAnnotated => NonNullNode,
                 _ => ObliviousNode,
@@ -172,7 +171,7 @@ namespace ICSharpCode.NullabilityInference
             }
             return new TypeWithNode(type, topLevelNode);
         }
-        internal TypeWithNode GetObliviousType(ITypeSymbol type)
+        internal TypeWithNode GetObliviousType(ITypeSymbol? type)
         {
             if (type is INamedTypeSymbol nts) {
                 return new TypeWithNode(nts, ObliviousNode, nts.FullTypeArguments().Select(this.GetObliviousType).ToArray());

@@ -71,10 +71,13 @@ namespace ICSharpCode.NullabilityInference
         private readonly Dictionary<ISymbol, TypeWithNode> localVarTypes = new Dictionary<ISymbol, TypeWithNode>();
         private readonly List<ISymbol> localVariables = new List<ISymbol>(); // used to remove dictionary entries at end of block
 
-        public override TypeWithNode Visit(IOperation operation, EdgeBuildingContext argument)
+        public override TypeWithNode Visit(IOperation? operation, EdgeBuildingContext argument)
         {
             Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null,
                 "flowStateReturned members should only be used when returning from Visit, never when entering");
+            if (operation == null) {
+                return new TypeWithNode(null, tsBuilder.ObliviousNode);
+            }
             TypeWithNode result = operation.Accept(this, argument);
             if (result.Node == null) {
                 // This happens with a "NoneOperation", because VisitNoneOperation() in the base class
@@ -85,7 +88,7 @@ namespace ICSharpCode.NullabilityInference
                     || operation.Syntax?.Kind() == SyntaxKind.ElementAccessExpression) {
                     // https://github.com/dotnet/roslyn/issues/19960
                     var pointerOperation = operation.Children.First();
-                    Debug.Assert(pointerOperation.Type.TypeKind == TypeKind.Pointer);
+                    Debug.Assert(pointerOperation.Type?.TypeKind == TypeKind.Pointer);
                     var pointerType = Visit(pointerOperation, EdgeBuildingContext.Normal);
                     foreach (var child in operation.Children.Skip(1)) {
                         // e.g. index for ElementAccessExpression
@@ -98,7 +101,7 @@ namespace ICSharpCode.NullabilityInference
             return result;
         }
 
-        private (FlowState.Snapshot onTrue, FlowState.Snapshot onFalse) VisitCondition(IOperation operation)
+        private (FlowState.Snapshot onTrue, FlowState.Snapshot onFalse) VisitCondition(IOperation? operation)
         {
             Debug.Assert(flowStateReturnedOnTrue == null && flowStateReturnedOnFalse == null);
             operation?.Accept(this, EdgeBuildingContext.Condition);
@@ -682,7 +685,7 @@ namespace ICSharpCode.NullabilityInference
                     break;
                 }
             }
-            if (operation.Parent is IArgumentOperation argument && argument.Parameter.HasDoesNotReturnIfAttribute(out bool parameterValue)) {
+            if (operation.Parent is IArgumentOperation { Parameter: { } param } && param.HasDoesNotReturnIfAttribute(out bool parameterValue)) {
                 if (parameterValue == valueOnNull) {
                     tsBuilder.CreateEdge(testedNode.Node, typeSystem.NonNullNode, new EdgeLabel("DoesNotReturnIf on param", operation));
                 }
@@ -701,7 +704,7 @@ namespace ICSharpCode.NullabilityInference
                 }
                 return lhs;
             }
-            if (operation.Type.TypeKind == TypeKind.Delegate && operation.OperatorKind == BinaryOperatorKind.Add) {
+            if (operation.Type?.TypeKind == TypeKind.Delegate && operation.OperatorKind == BinaryOperatorKind.Add) {
                 tsBuilder.CreateAssignmentEdge(rhs.WithNode(typeSystem.ObliviousNode), lhs, new EdgeLabel("delegate combine", operation));
                 return lhs;
             } else {
@@ -1006,8 +1009,7 @@ namespace ICSharpCode.NullabilityInference
             CreateCastEdge(returnType, delegateReturnType, label);
         }
 
-        private TypeArgumentListSyntax? FindTypeArgumentList(ExpressionSyntax expr) => expr switch
-        {
+        private TypeArgumentListSyntax? FindTypeArgumentList(ExpressionSyntax expr) => expr switch {
             GenericNameSyntax gns => gns.TypeArgumentList,
             MemberAccessExpressionSyntax maes => FindTypeArgumentList(maes.Name),
             AliasQualifiedNameSyntax aqns => FindTypeArgumentList(aqns.Name),
@@ -1021,6 +1023,9 @@ namespace ICSharpCode.NullabilityInference
             FlowState? flowStateOnTrue = null;
             FlowState? flowStateOnFalse = null;
             foreach (var arg in arguments) {
+                if (arg.Parameter == null) {
+                    throw new NotImplementedException("__arglist not supported");
+                }
                 var param = arg.Parameter.OriginalDefinition;
                 var parameterType = typeSystem.GetSymbolType(param);
                 bool isLValue = param.RefKind == RefKind.Ref || param.RefKind == RefKind.Out;
@@ -1241,7 +1246,7 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitDefaultValue(IDefaultValueOperation operation, EdgeBuildingContext argument)
         {
             var type = typeSystem.GetObliviousType(operation.Type);
-            if (operation.Type.IsReferenceType) {
+            if (operation.Type?.IsReferenceType ?? false) {
                 type = type.WithNode(typeSystem.NullableNode);
             }
             return type;
@@ -1615,7 +1620,7 @@ namespace ICSharpCode.NullabilityInference
         /// </remarks>
         private static IMethodSymbol GetDeconstructorMethod(IDeconstructionAssignmentOperation deconstructOperation, int parameterCount)
         {
-            return deconstructOperation.Value.Type.GetMembers("Deconstruct").OfType<IMethodSymbol>()
+            return deconstructOperation.Value.Type?.GetMembers("Deconstruct").OfType<IMethodSymbol>()
                 .FirstOrDefault(m => m.Parameters.Length == parameterCount)
                 ?? throw new NotImplementedException("Could not find deconstruct method for operation near " + deconstructOperation.Syntax?.GetLocation().StartPosToString());
         }
@@ -1662,8 +1667,7 @@ namespace ICSharpCode.NullabilityInference
                             localVariables.Add(lambdaParam);
                         }
                     } else {
-                        parameterList = lambda.Syntax switch
-                        {
+                        parameterList = lambda.Syntax switch {
                             SimpleLambdaExpressionSyntax syntax => new[] { syntax.Parameter },
                             ParenthesizedLambdaExpressionSyntax lambdaSyntax => lambdaSyntax.ParameterList.Parameters,
                             AnonymousMethodExpressionSyntax syntax => (IReadOnlyList<ParameterSyntax>?)syntax.ParameterList?.Parameters,
