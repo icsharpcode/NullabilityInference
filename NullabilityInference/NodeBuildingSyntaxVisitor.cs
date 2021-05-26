@@ -189,7 +189,13 @@ namespace ICSharpCode.NullabilityInference
                 foreach (var v in node.Variables) {
                     var symbol = semanticModel.GetDeclaredSymbol(v, cancellationToken);
                     if (symbol != null) {
-                        typeSystem.AddSymbolType(symbol, type);
+                        if (v.ArgumentList != null && symbol is IFieldSymbol f) {
+                            // field field
+                            var arrayType = new TypeWithNode(f.Type, typeSystem.ObliviousNode, new[] { type });
+                            typeSystem.AddSymbolType(symbol, arrayType);
+                        } else {
+                            typeSystem.AddSymbolType(symbol, type);
+                        }
                     }
                 }
             }
@@ -252,6 +258,8 @@ namespace ICSharpCode.NullabilityInference
                         throw new NotImplementedException($"DeclarationPattern with explicit type unsupported designation: {node.Designation} near {node.GetLocation().StartPosToString()}");
                     }
                 }
+            } else {
+                node.Designation?.Accept(this);
             }
             node.PositionalPatternClause?.Accept(this);
             node.PropertyPatternClause?.Accept(this);
@@ -313,7 +321,7 @@ namespace ICSharpCode.NullabilityInference
             }
             return method.EffectiveReturnType().SpecialType == SpecialType.System_Boolean;
         }
-        
+
 
         public override TypeWithNode VisitNameMemberCref(NameMemberCrefSyntax node)
         {

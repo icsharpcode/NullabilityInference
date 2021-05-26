@@ -1093,22 +1093,25 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitObjectCreation(IObjectCreationOperation operation, EdgeBuildingContext argument)
         {
+            TypeWithNode newObjectType;
             if (operation.Syntax is ObjectCreationExpressionSyntax syntax) {
-                var newObjectType = syntax.Type.Accept(syntaxVisitor).WithNode(typeSystem.NonNullNode);
-                var substitution = new TypeSubstitution(newObjectType.TypeArguments, new TypeWithNode[0]);
-                HandleArguments(substitution, operation.Arguments, invocationContext: argument);
-
-                var oldObjectCreationType = currentObjectCreationType;
-                try {
-                    currentObjectCreationType = newObjectType;
-                    operation.Initializer?.Accept(this, EdgeBuildingContext.Normal);
-                } finally {
-                    currentObjectCreationType = oldObjectCreationType;
-                }
-                return newObjectType;
+                newObjectType = syntax.Type.Accept(syntaxVisitor).WithNode(typeSystem.NonNullNode);
+            } else if (operation.Syntax is ImplicitObjectCreationExpressionSyntax) {
+                newObjectType = tsBuilder.CreateHelperType(operation.Type);
             } else {
                 throw new NotImplementedException($"ObjectCreationOperation with syntax={operation.Syntax}");
             }
+            var substitution = new TypeSubstitution(newObjectType.TypeArguments, new TypeWithNode[0]);
+            HandleArguments(substitution, operation.Arguments, invocationContext: argument);
+
+            var oldObjectCreationType = currentObjectCreationType;
+            try {
+                currentObjectCreationType = newObjectType;
+                operation.Initializer?.Accept(this, EdgeBuildingContext.Normal);
+            } finally {
+                currentObjectCreationType = oldObjectCreationType;
+            }
+            return newObjectType;
         }
 
         public override TypeWithNode VisitTypeParameterObjectCreation(ITypeParameterObjectCreationOperation operation, EdgeBuildingContext argument)
@@ -1787,6 +1790,18 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitConstantPattern(IConstantPatternOperation operation, EdgeBuildingContext argument)
         {
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitRelationalPattern(IRelationalPatternOperation operation, EdgeBuildingContext argument)
+        {
+            Visit(operation.Value, EdgeBuildingContext.Normal);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitNegatedPattern(INegatedPatternOperation operation, EdgeBuildingContext argument)
+        {
+            Visit(operation.Pattern, EdgeBuildingContext.Normal);
             return typeSystem.GetObliviousType(operation.Type);
         }
 

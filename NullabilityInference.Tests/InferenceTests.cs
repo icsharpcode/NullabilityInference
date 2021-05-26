@@ -1272,5 +1272,21 @@ class Program {
     }
 }");
         }
+
+        [Fact]
+        public void FixedFieldAccess()
+        {
+            AssertNullabilityInference(@"
+internal unsafe struct IMAGE_RESOURCE_DIRECTORY_STRING
+{
+    public ushort Length;
+    public fixed char NameString[1];
+}
+unsafe class Program {
+    public bool Test(IMAGE_RESOURCE_DIRECTORY_STRING* ptr) {
+        return ptr->NameString == null;
+    }
+}");
+        }
     }
 }

@@ -447,5 +447,12 @@ namespace ICSharpCode.NullabilityInference
             var symbolInfo = semanticModel.GetSymbolInfo(invocation, cancellationToken);
             return symbolInfo.Symbol is IMethodSymbol { MethodKind: MethodKind.ReducedExtension };
         }
+
+        public override TypeWithNode VisitVariableDeclarator(VariableDeclaratorSyntax node)
+        {
+            // skip node.ArgumentList (array size of fixed field), it doesn't have an associated operation
+            node.Initializer?.Accept(this);
+            return typeSystem.VoidType;
+        }
     }
 }
