@@ -1753,6 +1753,11 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
+        public override TypeWithNode VisitTypePattern(ITypePatternOperation operation, EdgeBuildingContext argument)
+        {
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
         public override TypeWithNode VisitDiscardPattern(IDiscardPatternOperation operation, EdgeBuildingContext argument)
         {
             return typeSystem.GetObliviousType(operation.Type);
@@ -1802,6 +1807,13 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitNegatedPattern(INegatedPatternOperation operation, EdgeBuildingContext argument)
         {
             Visit(operation.Pattern, EdgeBuildingContext.Normal);
+            return typeSystem.GetObliviousType(operation.Type);
+        }
+
+        public override TypeWithNode VisitBinaryPattern(IBinaryPatternOperation operation, EdgeBuildingContext argument)
+        {
+            Visit(operation.LeftPattern, EdgeBuildingContext.Normal);
+            Visit(operation.RightPattern, EdgeBuildingContext.Normal);
             return typeSystem.GetObliviousType(operation.Type);
         }
 
