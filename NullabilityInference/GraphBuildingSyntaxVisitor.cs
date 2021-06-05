@@ -204,6 +204,8 @@ namespace ICSharpCode.NullabilityInference
                 case SyntaxKind.UsingDirective: // using System?;
                 case SyntaxKind.DeclarationPattern: // x is string? b
                 case SyntaxKind.RecursivePattern:  // x is string? {} b
+                case SyntaxKind.TypePattern: // x is string
+                case SyntaxKind.ConstantPattern: // x is SomeName or SomeType
                 case SyntaxKind.Argument: // type name can appears as argument in nameof() expression
                     return false;
             }
