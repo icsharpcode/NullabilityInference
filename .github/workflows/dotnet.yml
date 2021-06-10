@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        Configuration: [debug, release]
+        Configuration: [ Debug, Release]
     env:
       StagingDirectory: buildartifacts 
       
@@ -28,7 +28,7 @@ jobs:
     - name: Build
       run: dotnet build --no-restore -c ${{ matrix.Configuration }}
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --no-build --verbosity normal  -c ${{ matrix.Configuration }}
     - name: Zip
       run: 7z a -tzip $env:StagingDirectory\InferNull.zip .\InferNull\bin\${{ matrix.Configuration }}\*
     - name: Upload
