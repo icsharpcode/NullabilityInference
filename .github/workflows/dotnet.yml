@@ -30,10 +30,10 @@ jobs:
     - name: Test
       run: dotnet test --no-build --verbosity normal  -c ${{ matrix.Configuration }}
     - name: Zip
-      run: 7z a -tzip $env:StagingDirectory\InferNull.zip .\InferNull\bin\${{ matrix.Configuration }}\*
+      run: 7z a -tzip $env:StagingDirectory\InferNull_${{ matrix.Configuration }}.zip .\InferNull\bin\${{ matrix.Configuration }}\*
     - name: Upload
       uses: actions/upload-artifact@v2
       with:
-        name: InferNull (${{ matrix.configuration }})
-        path: ${{ env.StagingDirectory }}\InferNull.zip
+        name: InferNull (${{ matrix.configuration }}) ${{ github.run_number }}
+        path: ${{ env.StagingDirectory }}\InferNull_${{ matrix.Configuration }}.zip
         if-no-files-found: error
