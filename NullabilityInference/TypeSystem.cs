@@ -123,6 +123,10 @@ namespace ICSharpCode.NullabilityInference
                 case SymbolKind.Event:
                     var ev = (IEventSymbol)symbol;
                     return FromType(ev.Type, ev.NullableAnnotation, ignoreAttributes ? default : ev.GetAttributes());
+                case SymbolKind.Local:
+                    Debug.Fail("External local??");
+                    var local = (ILocalSymbol)symbol;
+                    return FromType(local.Type, local.NullableAnnotation, ignoreAttributes ? default : local.GetAttributes());
                 default:
                     throw new NotImplementedException($"External symbol: {symbol.Kind}");
             }
