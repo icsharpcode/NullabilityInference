@@ -44,7 +44,11 @@ namespace ICSharpCode.NullabilityInference
         /// Visiting a condition that will decide control-flow.
         /// In this mode, operations can create different flow-state onTrue/onFalse.
         /// </summary>
-        Condition
+        Condition,
+        /// <summary>
+        /// Visiting descendants of a declaration expression. `var (a, b) = t;`
+        /// </summary>
+        DeclarationExpression
     }
 
     internal class EdgeBuildingOperationVisitor : OperationVisitor<EdgeBuildingContext, TypeWithNode>
@@ -738,6 +742,14 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitLocalReference(ILocalReferenceOperation operation, EdgeBuildingContext argument)
         {
+            if (argument == EdgeBuildingContext.DeclarationExpression) {
+                var ty = tsBuilder.CreateHelperType(operation.Type);
+                ty.SetName(operation.Local.Name);
+
+                localVarTypes.Add(operation.Local, ty);
+                localVariables.Add(operation.Local);
+                return ty;
+            }
             if (!localVarTypes.TryGetValue(operation.Local, out TypeWithNode variableType)) {
                 variableType = typeSystem.GetSymbolType(operation.Local);
             }
@@ -1631,7 +1643,8 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode VisitDeclarationExpression(IDeclarationExpressionOperation operation, EdgeBuildingContext argument)
         {
             // appears e.g. in `var (a, b) = tuple;`
-            return Visit(operation.Expression, argument);
+            Debug.Assert(argument == EdgeBuildingContext.LValue);
+            return Visit(operation.Expression, EdgeBuildingContext.DeclarationExpression);
         }
 
         public override TypeWithNode VisitDiscardOperation(IDiscardOperation operation, EdgeBuildingContext argument)
@@ -1679,9 +1692,12 @@ namespace ICSharpCode.NullabilityInference
                     }
                     if (parameterList != null) {
                         Debug.Assert(parameterList.Count == delegateParameters.Count);
-                        foreach (var (lambdaParamSyntax, invokeParam) in parameterList.Zip(delegateParameters)) {
+                        Debug.Assert(parameterList.Count == lambda.Symbol.Parameters.Length);
+                        foreach (var ((lambdaParamSyntax, invokeParam), lambdaParamSymbol) in parameterList.Zip(delegateParameters).Zip(lambda.Symbol.Parameters)) {
                             if (lambdaParamSyntax.Type != null) {
                                 var paramType = lambdaParamSyntax.Type.Accept(syntaxVisitor);
+                                localVarTypes.Add(lambdaParamSymbol, paramType);
+                                localVariables.Add(lambdaParamSymbol);
                                 // C# 8 requires lambda parameters to exactly match the delegate type
                                 // e.g. someEvent += delegate(object? sender, EventArgs? e)
                                 // causes a warning that the EventArgs paramter must not be nullable.
@@ -1689,9 +1705,6 @@ namespace ICSharpCode.NullabilityInference
                                 tsBuilder.CreateTypeEdge(invokeParam, paramType, null, VarianceKind.None, new EdgeLabel("lambda parameter", lambdaParamSyntax));
                             } else {
                                 // Implicitly typed lambda parameter: treat like a `var` variable initialization
-                                var lambdaParamSymbol = syntaxVisitor.semanticModel.GetDeclaredSymbol(lambdaParamSyntax);
-                                if (lambdaParamSymbol == null)
-                                    throw new InvalidOperationException("Could not find symbol for lambda parameter");
                                 localVarTypes.Add(lambdaParamSymbol, invokeParam);
                                 localVariables.Add(lambdaParamSymbol);
                             }

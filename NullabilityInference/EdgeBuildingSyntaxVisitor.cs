@@ -112,7 +112,7 @@ namespace ICSharpCode.NullabilityInference
                         return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
                     }
                 case ITypeParameterSymbol tp:
-                    if (tp.HasReferenceTypeConstraint && CanBeMadeNullableSyntax(node)) {
+                    if (tp.CanBeMadeNullable() && CanBeMadeNullableSyntax(node)) {
                         return new TypeWithNode(tp, mapping[node], typeArgs);
                     } else {
                         return new TypeWithNode(tp, typeSystem.ObliviousNode, typeArgs);
