@@ -138,7 +138,7 @@ namespace ICSharpCode.NullabilityInference
             // Can be a type name, e.g. appearing in "Namespace.Type.StaticMethod()".
             var symbolInfo = semanticModel.GetSymbolInfo(node, cancellationToken);
             if (symbolInfo.Symbol is INamedTypeSymbol ty) {
-                var typeArgs = CollectTypeArgs(node).Select(Visit).ToArray();
+                TypeWithNode[] typeArgs = CollectTypeArgs(node).Select(Visit).ToArray();
                 return new TypeWithNode(ty, typeSystem.ObliviousNode, typeArgs);
             } else {
                 return HandleAsOperation(node);
@@ -162,7 +162,7 @@ namespace ICSharpCode.NullabilityInference
             if (operation == null)
                 throw new NotSupportedException($"Could not get operation for {node}");
             if (node.Initializer?.ThisOrBaseKeyword.Kind() != SyntaxKind.ThisKeyword) {
-                HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>();
+                HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
                 foreach (var assgn in operation.DescendantsAndSelf().OfType<ISimpleAssignmentOperation>()) {
                     if (assgn.Target is IFieldReferenceOperation fieldRef) {
                         initializedSymbols.Add(fieldRef.Field);
@@ -402,11 +402,11 @@ namespace ICSharpCode.NullabilityInference
             var hasNonStaticConstructor = node.Members.Any(m => m is ConstructorDeclarationSyntax ctor && !ctor.Modifiers.Any(SyntaxKind.StaticKeyword));
             if (!hasStaticConstructor) {
                 // implicit compiler-generated static constructor initializes all static fields to null
-                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(), new EdgeLabel("uninit"));
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: true, new HashSet<ISymbol>(SymbolEqualityComparer.Default), new EdgeLabel("uninit"));
             }
             if (!hasNonStaticConstructor && !skipInstanceCtor) {
                 // implicit compiler-generated constructor initializes all instance fields to null
-                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(), new EdgeLabel("uninit"));
+                MarkFieldsAndPropertiesAsNullable(node.Members, isStatic: false, new HashSet<ISymbol>(SymbolEqualityComparer.Default), new EdgeLabel("uninit"));
             }
         }
 

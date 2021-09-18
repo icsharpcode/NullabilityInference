@@ -68,7 +68,7 @@ namespace ICSharpCode.NullabilityInference
         }
 
         // Maps implicitly-typed local variables (or lambda parameters) to their inferred type.
-        private readonly Dictionary<ISymbol, TypeWithNode> localVarTypes = new Dictionary<ISymbol, TypeWithNode>();
+        private readonly Dictionary<ISymbol, TypeWithNode> localVarTypes = new Dictionary<ISymbol, TypeWithNode>(SymbolEqualityComparer.Default);
         private readonly List<ISymbol> localVariables = new List<ISymbol>(); // used to remove dictionary entries at end of block
 
         public override TypeWithNode Visit(IOperation? operation, EdgeBuildingContext argument)

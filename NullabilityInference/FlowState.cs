@@ -1,9 +1,7 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.Text;
 using Microsoft.CodeAnalysis;
 
 namespace ICSharpCode.NullabilityInference
@@ -44,13 +42,13 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        private static readonly ImmutableDictionary<ISymbol, PathNode> emptyMembers = ImmutableDictionary.Create<ISymbol, PathNode>();
+        private static readonly ImmutableDictionary<ISymbol, PathNode> emptyMembers = ImmutableDictionary.Create<ISymbol, PathNode>(SymbolEqualityComparer.Default);
 
         private readonly TypeSystem typeSystem;
 
         private bool unreachable;
         private PathNode thisPath;
-        private ImmutableDictionary<ISymbol, PathNode>.Builder locals = ImmutableDictionary.CreateBuilder<ISymbol, PathNode>();
+        private ImmutableDictionary<ISymbol, PathNode>.Builder locals = ImmutableDictionary.CreateBuilder<ISymbol, PathNode>(SymbolEqualityComparer.Default);
 
         public FlowState(TypeSystem typeSystem)
         {

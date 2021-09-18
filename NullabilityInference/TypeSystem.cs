@@ -48,11 +48,11 @@ namespace ICSharpCode.NullabilityInference
 
         private readonly CSharpCompilation compilation;
         private readonly Dictionary<SyntaxTree, SyntaxToNodeMapping> syntaxMapping = new Dictionary<SyntaxTree, SyntaxToNodeMapping>();
-        private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>();
+        private readonly Dictionary<ISymbol, TypeWithNode> symbolType = new Dictionary<ISymbol, TypeWithNode>(SymbolEqualityComparer.Default);
         private readonly Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode> baseTypes = new Dictionary<(ITypeSymbol, ITypeSymbol), TypeWithNode>();
         private readonly List<NullabilityNode> additionalNodes = new List<NullabilityNode>();
         private readonly Dictionary<IParameterSymbol, (NullabilityNode whenTrue, NullabilityNode whenFalse)> outParamFlowNodes
-            = new Dictionary<IParameterSymbol, (NullabilityNode whenTrue, NullabilityNode whenFalse)>();
+            = new Dictionary<IParameterSymbol, (NullabilityNode whenTrue, NullabilityNode whenFalse)>(SymbolEqualityComparer.Default);
 
 
         private readonly INamedTypeSymbol voidType;

@@ -127,7 +127,7 @@ namespace ICSharpCode.NullabilityInference
             return base.VisitNullableDirectiveTrivia(node);
         }
 
-        private readonly Dictionary<IAliasSymbol, TypeWithNode> aliases = new Dictionary<IAliasSymbol, TypeWithNode>();
+        private readonly Dictionary<IAliasSymbol, TypeWithNode> aliases = new Dictionary<IAliasSymbol, TypeWithNode>(SymbolEqualityComparer.Default);
 
         public override TypeWithNode VisitUsingDirective(UsingDirectiveSyntax node)
         {
@@ -496,7 +496,7 @@ namespace ICSharpCode.NullabilityInference
             return typeSystem.VoidType;
         }
 
-        private readonly Dictionary<IParameterSymbol, TypeWithNode> parameterTypes = new Dictionary<IParameterSymbol, TypeWithNode>();
+        private readonly Dictionary<IParameterSymbol, TypeWithNode> parameterTypes = new Dictionary<IParameterSymbol, TypeWithNode>(SymbolEqualityComparer.Default);
 
         private void HandleThrow(ExpressionSyntax? exceptionSyntax)
         {
