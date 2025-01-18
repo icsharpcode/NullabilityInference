@@ -84,14 +84,13 @@ namespace ICSharpCode.NullabilityInference
                 // This happens with a "NoneOperation", because VisitNoneOperation() in the base class
                 // returns default(TResult). Unfortunately that method is internal so we can't override it,
                 // and instead have to handle it as a special case here.
-                if (operation.Syntax?.Parent?.Kind() == SyntaxKind.PointerMemberAccessExpression
-                    || operation.Syntax?.Kind() == SyntaxKind.PointerIndirectionExpression
-                    || operation.Syntax?.Kind() == SyntaxKind.ElementAccessExpression) {
+                if (operation.Syntax?.Parent.IsKind(SyntaxKind.PointerMemberAccessExpression) == true
+                    || operation.Syntax?.IsAnyKind(SyntaxKind.PointerIndirectionExpression, SyntaxKind.ElementAccessExpression) == true) {
                     // https://github.com/dotnet/roslyn/issues/19960
-                    var pointerOperation = operation.Children.First();
+                    var pointerOperation = operation.ChildOperations.First();
                     Debug.Assert(pointerOperation.Type?.TypeKind == TypeKind.Pointer);
                     var pointerType = Visit(pointerOperation, EdgeBuildingContext.Normal);
-                    foreach (var child in operation.Children.Skip(1)) {
+                    foreach (var child in operation.ChildOperations.Skip(1)) {
                         // e.g. index for ElementAccessExpression
                         child.Accept(this, EdgeBuildingContext.Normal);
                     }
@@ -121,14 +120,14 @@ namespace ICSharpCode.NullabilityInference
         public override TypeWithNode DefaultVisit(IOperation operation, EdgeBuildingContext argument)
         {
             Debug.Fail($"Unhandled operation {operation.Kind} near {operation.Syntax?.GetLocation().StartPosToString()}");
-            foreach (var child in operation.Children)
+            foreach (var child in operation.ChildOperations)
                 child.Accept(this, EdgeBuildingContext.Normal);
             return typeSystem.VoidType;
         }
 
         public override TypeWithNode VisitInvalid(IInvalidOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children)
+            foreach (var child in operation.ChildOperations)
                 child.Accept(this, EdgeBuildingContext.Normal);
             return typeSystem.GetObliviousType(operation.Type);
         }
@@ -138,7 +137,7 @@ namespace ICSharpCode.NullabilityInference
             var oldFlowState = flowState.SaveSnapshot();
             try {
                 flowState.Clear();
-                foreach (var child in operation.Children)
+                foreach (var child in operation.ChildOperations)
                     child.Accept(this, EdgeBuildingContext.Normal);
                 return typeSystem.VoidType;
             } finally {
@@ -151,7 +150,7 @@ namespace ICSharpCode.NullabilityInference
             var oldFlowState = flowState.SaveSnapshot();
             try {
                 flowState.Clear();
-                foreach (var child in operation.Children)
+                foreach (var child in operation.ChildOperations)
                     child.Accept(this, EdgeBuildingContext.Normal);
                 return typeSystem.VoidType;
             } finally {
@@ -180,7 +179,7 @@ namespace ICSharpCode.NullabilityInference
                 syntaxVisitor.currentMethod = operation.Symbol;
                 syntaxVisitor.currentMethodReturnType = syntaxVisitor.GetMethodReturnSymbol(operation.Symbol);
                 flowState.Clear();
-                foreach (var child in operation.Children)
+                foreach (var child in operation.ChildOperations)
                     child.Accept(this, EdgeBuildingContext.Normal);
                 return typeSystem.VoidType;
             } finally {
@@ -257,7 +256,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitCatchClause(ICatchClauseOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children)
+            foreach (var child in operation.ChildOperations)
                 child.Accept(this, EdgeBuildingContext.Normal);
             return typeSystem.VoidType;
         }
@@ -388,7 +387,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitUsing(IUsingOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children)
+            foreach (var child in operation.ChildOperations)
                 child.Accept(this, EdgeBuildingContext.Normal);
             return typeSystem.VoidType;
         }
@@ -1258,7 +1257,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitInterpolatedString(IInterpolatedStringOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children)
+            foreach (var child in operation.ChildOperations)
                 child.Accept(this, EdgeBuildingContext.Normal);
             return new TypeWithNode(operation.Type, typeSystem.NonNullNode);
         }
@@ -1270,7 +1269,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitInterpolation(IInterpolationOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children) {
+            foreach (var child in operation.ChildOperations) {
                 child.Accept(this, EdgeBuildingContext.Normal);
             }
             return typeSystem.GetObliviousType(operation.Type);
@@ -1509,7 +1508,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitVariableDeclarationGroup(IVariableDeclarationGroupOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children) {
+            foreach (var child in operation.ChildOperations) {
                 child.Accept(this, EdgeBuildingContext.Normal);
             }
             return typeSystem.VoidType;
@@ -1536,7 +1535,7 @@ namespace ICSharpCode.NullabilityInference
                     localVariables.Add(decl.Symbol);
                 }
             } else {
-                foreach (var child in operation.Children) {
+                foreach (var child in operation.ChildOperations) {
                     child.Accept(this, EdgeBuildingContext.Normal);
                 }
             }
@@ -1562,7 +1561,7 @@ namespace ICSharpCode.NullabilityInference
 
         public override TypeWithNode VisitObjectOrCollectionInitializer(IObjectOrCollectionInitializerOperation operation, EdgeBuildingContext argument)
         {
-            foreach (var child in operation.Children) {
+            foreach (var child in operation.ChildOperations) {
                 child.Accept(this, EdgeBuildingContext.Normal);
             }
             return typeSystem.VoidType;
@@ -1776,7 +1775,7 @@ namespace ICSharpCode.NullabilityInference
                 }
                 // Recursive pattern never matches null, so ignore the top-level nullability.
                 currentPatternInput = currentPatternInput.WithNode(typeSystem.ObliviousNode);
-                foreach (var child in operation.Children)
+                foreach (var child in operation.ChildOperations)
                     child.Accept(this, EdgeBuildingContext.Normal);
                 return currentPatternInput;
             } finally {

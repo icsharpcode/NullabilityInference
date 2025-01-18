@@ -21,6 +21,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -161,7 +162,7 @@ namespace ICSharpCode.NullabilityInference
             var operation = semanticModel.GetOperation(node, cancellationToken);
             if (operation == null)
                 throw new NotSupportedException($"Could not get operation for {node}");
-            if (node.Initializer?.ThisOrBaseKeyword.Kind() != SyntaxKind.ThisKeyword) {
+            if (!node.Initializer.IsKind(SyntaxKind.ThisKeyword)) {
                 HashSet<ISymbol> initializedSymbols = new HashSet<ISymbol>(SymbolEqualityComparer.Default);
                 foreach (var assgn in operation.DescendantsAndSelf().OfType<ISimpleAssignmentOperation>()) {
                     if (assgn.Target is IFieldReferenceOperation fieldRef) {

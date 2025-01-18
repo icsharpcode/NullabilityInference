@@ -148,7 +148,7 @@ namespace Xunit.Sdk
             }
         }
 
-        static string ConvertToSimpleTypeName(TypeInfo typeInfo)
+        private static string ConvertToSimpleTypeName(TypeInfo typeInfo)
         {
             if (!typeInfo.IsGenericType)
                 return typeInfo.Name;
@@ -163,7 +163,7 @@ namespace Xunit.Sdk
 
 #if XUNIT_NULLABLE
         [return: NotNullIfNotNull("value")]
-        static string? ConvertToString(object? value)
+        private static string? ConvertToString(object? value)
 #else
         static string ConvertToString(object value)
 #endif

@@ -19,7 +19,9 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace ICSharpCode.NullabilityInference
@@ -64,8 +66,7 @@ namespace ICSharpCode.NullabilityInference
 
         public static VarianceKind Combine(this (VarianceKind, VarianceKind) variancePair)
         {
-            return variancePair switch
-            {
+            return variancePair switch {
                 (VarianceKind.None, _) => VarianceKind.None,
                 (_, VarianceKind.None) => VarianceKind.None,
                 (VarianceKind.Out, VarianceKind.Out) => VarianceKind.Out,
@@ -78,8 +79,7 @@ namespace ICSharpCode.NullabilityInference
 
         public static VarianceKind ToVariance(this RefKind refKind)
         {
-            return refKind switch
-            {
+            return refKind switch {
                 RefKind.None => VarianceKind.In,
                 RefKind.In => VarianceKind.In,
                 RefKind.Ref => VarianceKind.None,
@@ -304,6 +304,19 @@ namespace ICSharpCode.NullabilityInference
             int removeIndex = list.Count - 1;
             list[index] = list[removeIndex];
             list.RemoveAt(removeIndex);
+        }
+
+        public static bool IsAnyKind(this SyntaxNode? node, params SyntaxKind[] kinds)
+        {
+            if (node is null)
+                return false;
+
+            foreach (var kind in kinds) {
+                if (node.IsKind(kind))
+                    return true;
+            }
+
+            return false;
         }
     }
 }
