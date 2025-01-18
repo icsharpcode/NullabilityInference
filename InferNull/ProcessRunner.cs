@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
+
 using Microsoft.Win32.SafeHandles;
 
 namespace InferNull
@@ -67,7 +68,7 @@ namespace InferNull
             }
             return tcs.Task;
 
-            void WaitForExitAsyncCallback(object context, bool wasSignaled)
+            void WaitForExitAsyncCallback(object? context, bool wasSignaled)
             {
                 // The lock is used to ensure `registeredWaitHandle` is initialized here
                 // even if the process terminates while `RegisterWaitForSingleObject` is returning.

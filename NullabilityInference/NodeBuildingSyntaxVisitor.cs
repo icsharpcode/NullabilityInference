@@ -22,6 +22,7 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Threading;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -134,6 +135,7 @@ namespace ICSharpCode.NullabilityInference
             if (node.Alias != null) {
                 VisitToken(node.UsingKeyword);
                 VisitToken(node.StaticKeyword);
+                Debug.Assert(node.Name != null);
                 var type = node.Name.Accept(this);
                 var alias = semanticModel.GetDeclaredSymbol(node, cancellationToken);
                 if (alias != null) {
@@ -536,8 +538,7 @@ namespace ICSharpCode.NullabilityInference
                     parameter = property.Parameters.SingleOrDefault(p => p.Name == name);
                 }
                 return parameter != null;
-            } else if (argument.Expression is InvocationExpressionSyntax
-            {
+            } else if (argument.Expression is InvocationExpressionSyntax {
                 Expression: IdentifierNameSyntax { Identifier: { Text: "nameof" } },
                 ArgumentList: { Arguments: { Count: 1 } nameofArgs }
             }) {

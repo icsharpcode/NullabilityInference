@@ -21,15 +21,20 @@ using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.ComponentModel.DataAnnotations;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+
 using ICSharpCode.NullabilityInference;
+
 using InferNull.FromRoslynSdk;
+
 using McMaster.Extensions.CommandLineUtils;
+
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -86,9 +91,12 @@ Remarks:
 #endif
 
         /// <remarks>Used by reflection in CommandLineApplication.ExecuteAsync</remarks>
+        [SuppressMessage("CodeQuality", "IDE0051:Remove unused private members")]
         private async Task<int> OnExecuteAsync(CommandLineApplication _)
         {
-            var outputDirectory = new DirectoryInfo(Path.GetDirectoryName(ProjectName));
+            string? directory = Path.GetDirectoryName(ProjectName);
+            Debug.Assert(directory != null);
+            var outputDirectory = new DirectoryInfo(directory);
             if (await CouldOverwriteUncommittedFilesAsync(outputDirectory)) {
                 await Console.Error.WriteLineAsync($"WARNING: There are files in {outputDirectory.FullName} which may be overwritten, and aren't committed to git");
                 if (Force) {
@@ -147,7 +155,7 @@ Remarks:
             if (ShowGraph) {
                 await Console.Error.WriteLineAsync("Showing graph...");
                 exportedGraph ??= ExportTypeGraph(engine);
-                    exportedGraph.Show();
+                exportedGraph.Show();
             }
             if (ExportGraph != null) {
                 await Console.Error.WriteLineAsync("Exporting graph...");
@@ -222,6 +230,7 @@ Remarks:
                     tree = tree.WithRootAndOptions(root, tree.Options);
                 }
             }
+            Debug.Assert(tree.Encoding != null);
             using var stream = new FileStream(tree.FilePath, FileMode.Create, FileAccess.Write);
             using var writer = new StreamWriter(stream, tree.Encoding);
             writer.Write(tree.GetText(cancellationToken));

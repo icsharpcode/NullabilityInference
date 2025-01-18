@@ -20,6 +20,7 @@ using System;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Operations;
 
@@ -97,7 +98,7 @@ namespace ICSharpCode.NullabilityInference
             }
         }
 
-        public override bool Equals(object obj) => obj is AccessPath p && Equals(p);
+        public override bool Equals(object? obj) => obj is AccessPath p && Equals(p);
 
         public override int GetHashCode()
         {

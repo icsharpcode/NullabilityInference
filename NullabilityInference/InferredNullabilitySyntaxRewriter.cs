@@ -17,9 +17,8 @@
 // DEALINGS IN THE SOFTWARE.
 
 using System.Diagnostics;
-using System.Linq;
 using System.Threading;
-using System.Threading.Tasks;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
@@ -156,6 +155,7 @@ namespace ICSharpCode.NullabilityInference
         {
             bool hasUsingCodeAnalysis = false;
             foreach (var u in node.Usings) {
+                Debug.Assert(u.Name != null);
                 var symbolInfo = semanticModel.GetSymbolInfo(u.Name, cancellationToken);
                 if (symbolInfo.Symbol is INamespaceSymbol ns && ns.GetFullName() == "System.Diagnostics.CodeAnalysis") {
                     hasUsingCodeAnalysis = true;
