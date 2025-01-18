@@ -23,9 +23,10 @@ using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
-using System.Threading.Tasks;
+
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+
 using Xunit;
 using Xunit.Sdk;
 
@@ -33,7 +34,7 @@ namespace ICSharpCode.NullabilityInference.Tests
 {
     public class NullabilityTestHelper
     {
-        private static readonly string refAsmPath = @"c:\program files\dotnet\packs\Microsoft.NETCore.App.Ref\3.1.0\ref\netcoreapp3.1";
+        private static readonly string refAsmPath = @"c:\program files\dotnet\packs\Microsoft.NETCore.App.Ref\8.0.10\ref\net8.0";
         private static readonly Lazy<IEnumerable<MetadataReference>> defaultReferences = new Lazy<IEnumerable<MetadataReference>>(delegate {
             return new[]
             {
@@ -47,7 +48,7 @@ namespace ICSharpCode.NullabilityInference.Tests
 
         static NullabilityTestHelper()
         {
-            Debug.Listeners.Insert(0, new TestTraceListener());
+            Trace.Listeners.Insert(0, new TestTraceListener());
         }
 
         private class TestTraceListener : DefaultTraceListener
