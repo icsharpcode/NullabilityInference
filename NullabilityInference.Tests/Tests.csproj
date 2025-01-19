@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net80</TargetFramework>
-    <OutputType>Library</OutputType>
     <AssemblyName>ICSharpCode.NullabilityInference.Tests</AssemblyName>
     <RootNamespace>ICSharpCode.NullabilityInference.Tests</RootNamespace>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
@@ -16,6 +15,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\NullabilityInference\NullabilityInference.csproj" />
