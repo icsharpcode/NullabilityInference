@@ -70,7 +70,7 @@ namespace ICSharpCode.NullabilityInference
             string fileName = name != null ? Path.Combine(Path.GetTempPath(), name) : Path.GetTempFileName();
             Save(fileName + ".gv");
             Process.Start("dot", "\"" + fileName + ".gv\" -Tpng -o \"" + fileName + ".png\"").WaitForExit();
-            Process.Start(fileName + ".png");
+            Process.Start(new ProcessStartInfo(fileName + ".png") { UseShellExecute = true });
         }
 
         private static string Escape(string text)
